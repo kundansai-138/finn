@@ -14,11 +14,11 @@ from typing import Any
 
 from fastapi import Body, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import ask as ask_mod
-from . import clock, db, portfolio, pull, push, scheduler, store
+from . import auth, clock, db, portfolio, pull, push, scheduler, scoring, store
 from . import enrich as web_enrich
 from . import radar as radar_mod
 from .context import DEFAULT_USER, current_user, reset_user, set_user
@@ -44,11 +44,11 @@ _errors: dict[str, int] = defaultdict(int)
 async def user_and_timing(request: Request, call_next):
     """Bind the caller's identity for every DB read/write, and time the request.
 
-    Prototype identity is the X-FINN-User header (default: the demo user). Production replaces this
-    with real authentication; the database enforces the same boundary with row-level security."""
-    uid = request.headers.get("x-finn-user", DEFAULT_USER).lower()
-    if not _USER_RX.match(uid):
-        uid = DEFAULT_USER
+    Identity (finn/auth.py): the session cookie of a signed-in investor; else the X-FINN-User header
+    (development and tests, disabled by FINN_AUTH_STRICT=on); else the guest demo user. The database
+    enforces the same per-user boundary with row-level security."""
+    uid, how = auth.resolve(request.cookies.get(auth.COOKIE), request.headers.get("x-finn-user"))
+    request.state.auth = how
     token = set_user(uid)
     t0 = time.perf_counter()
     try:
@@ -274,7 +274,8 @@ def add_contact(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     title = (body.get("title") or "").strip()
     lead = bool(body.get("lead"))
     today = clock.now().date().isoformat()
-    person = {"name": name, "headline": f"{title}, {net.org_name(oid) if oid else org_name}".strip(", "),
+    org_label = net.orgs.get(oid, {}).get("name") or org_name   # a company new to the map isn't in this (cached) graph yet
+    person = {"name": name, "headline": f"{title}, {org_label}".strip(", "),
               "source": body.get("source_url"), "tags": body.get("tags") or [],
               "roles": [{"org": oid, "title": title or "—", "function": discover.infer_function(title),
                          "from": body.get("since_role"), "to": None}] if oid else []}
@@ -401,14 +402,191 @@ def push_key() -> dict[str, Any]:
 def push_subscribe(request: Request, sub: dict[str, Any] = Body(...)) -> dict[str, Any]:
     if not sub.get("endpoint") or not (sub.get("keys") or {}).get("p256dh"):
         raise HTTPException(400, "not a push subscription")
-    store.push_sub_add(sub, ua=request.headers.get("user-agent", "")[:200])
-    return {"ok": True, "devices": len(store.push_subs_for())}
+    try:
+        store.push_sub_add(sub, ua=request.headers.get("user-agent", "")[:200])
+    except Exception:  # the device is registered to another account (its row is invisible here)
+        raise HTTPException(409, "This device gets alerts for another account. Turn alerts off there first.")
+    n = store.notify_users_sync()   # the scheduler pushes to every user in this registry
+    return {"ok": True, "devices": n, "user": current_user()}
 
 
 @app.delete("/api/push/subscribe")
 def push_unsubscribe(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     store.push_sub_remove(body.get("endpoint", ""))
+    store.notify_users_sync()
     return {"ok": True}
+
+
+# ---- Accounts -------------------------------------------------------------------
+def _set_cookie(request: Request, resp: JSONResponse, token: str | None) -> JSONResponse:
+    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+    if token:
+        resp.set_cookie(auth.COOKIE, token, max_age=auth.TTL, httponly=True, samesite="lax", secure=secure, path="/")
+    else:
+        resp.delete_cookie(auth.COOKIE, path="/")
+    return resp
+
+
+def _me() -> dict[str, Any]:
+    uid = current_user()
+    with store.ro() as c:
+        row = c.execute(store.select(store.users.c.name).where(store.users.c.id == uid)).first()
+    return {"user": uid, "name": row.name if row else uid, "guest": uid == DEFAULT_USER,
+            "devices": len(store.push_subs_for()), "unread": store.inbox_unread()}
+
+
+# ---- Notifications: the in-app inbox (every alert lands here; phones with alerts on also get a push)
+@app.get("/api/notifications")
+def notifications(limit: int = 50) -> dict[str, Any]:
+    return {"items": store.inbox_list(min(limit, 200)), "unread": store.inbox_unread(), "devices": len(store.push_subs_for())}
+
+
+@app.post("/api/notifications/read")
+def notifications_read(body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    store.inbox_mark_read([int(i) for i in (body.get("ids") or [])] or None)
+    return {"unread": store.inbox_unread()}
+
+
+@app.post("/api/notifications/check")
+def notifications_check() -> dict[str, Any]:
+    """Run this user's alert and keep-in-touch checks now, instead of waiting for the scheduler."""
+    from . import notify
+    from .network import nudges
+
+    a, n = notify.dispatch(), nudges.dispatch()
+    return {"new": a.get("items", 0) + n.get("items", 0), "unread": store.inbox_unread()}
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request) -> dict[str, Any]:
+    return {**_me(), "via": getattr(request.state, "auth", "guest")}
+
+
+@app.post("/api/auth/register")
+def auth_register(request: Request, body: dict[str, Any] = Body(...)) -> JSONResponse:
+    try:
+        # A new account starts empty: no demo holdings, no demo network, nothing to see until you add it.
+        uid = auth.register(body.get("username", ""), body.get("password", ""), body.get("name"), start_from_demo=False)
+    except auth.AuthError as e:
+        raise HTTPException(e.status, str(e))
+    tok = auth.new_session(uid, request.headers.get("user-agent"))
+    reset = set_user(uid)
+    try:
+        return _set_cookie(request, JSONResponse(_me()), tok)
+    finally:
+        reset_user(reset)
+
+
+@app.post("/api/auth/login")
+def auth_login(request: Request, body: dict[str, Any] = Body(...)) -> JSONResponse:
+    try:
+        uid = auth.login(body.get("username", ""), body.get("password", ""))
+    except auth.AuthError as e:
+        raise HTTPException(e.status, str(e))
+    tok = auth.new_session(uid, request.headers.get("user-agent"))
+    reset = set_user(uid)
+    try:
+        return _set_cookie(request, JSONResponse(_me()), tok)
+    finally:
+        reset_user(reset)
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request) -> JSONResponse:
+    auth.end_session(request.cookies.get(auth.COOKIE))
+    return _set_cookie(request, JSONResponse({"ok": True}), None)
+
+
+# ---- The radar: add and remove companies ----------------------------------------
+@app.get("/api/universe/search")
+def universe_search(q: str = "", limit: int = 8) -> dict[str, Any]:
+    """NSE-listed companies by ticker or name (NSE's public EQUITY_L list, cached weekly)."""
+    from .sources import universe
+
+    sym_name, _ = universe.load()
+    ql = q.strip().lower()
+    if len(ql) < 2:
+        return {"results": []}
+    held = {h["ticker"]: "portfolio" for h in portfolio.holdings()} | {h["ticker"]: "research" for h in portfolio.research()}
+    scored = []
+    for sym, name in sym_name.items():
+        s, n = sym.lower(), name.lower()
+        rank = 0 if s == ql else 1 if s.startswith(ql) else 2 if n.startswith(ql) else 3 if f" {ql}" in f" {n}" else None
+        if rank is not None:
+            scored.append((rank, len(name), sym, name))
+    scored.sort()
+    return {"results": [{"ticker": sym, "name": name, "on": held.get(sym)} for _, _, sym, name in scored[:limit]]}
+
+
+@app.post("/api/holdings")
+def holdings_add(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Put a company on the radar (kind=portfolio, with a weight) or the research list (kind=research)."""
+    from .sources import universe
+
+    t = (body.get("ticker") or "").strip().upper()
+    kind = body.get("kind", "portfolio")
+    if kind not in ("portfolio", "research"):
+        raise HTTPException(422, "kind is portfolio or research")
+    name = universe.name(t)
+    if not name:
+        raise HTTPException(422, f"{t or 'That'} isn't an NSE-listed equity.")
+    w = body.get("weight")
+    if kind == "portfolio":
+        try:
+            w = round(float(w), 2) if w not in (None, "") else 1.0
+        except (TypeError, ValueError):
+            raise HTTPException(422, "weight is a percentage")
+        if not 0 < w <= 100:
+            raise HTTPException(422, "weight is a percentage between 0 and 100")
+    new = store.holding_add(t, name, kind, w, (body.get("theme") or "").strip()[:60] or None)
+    if kind == "portfolio":
+        portfolio.track(t)   # the shared refresh now fetches its filings too
+    store.kv_delete_prefix("dossier", f"{current_user()}:{t}")
+    # Fetch its filings and prices off the request path, so the next radar has the tile filled in.
+    threading.Thread(target=contextvars.copy_context().run, args=(_warm_company, t), daemon=True).start()
+    total = sum(h.get("weight") or 0 for h in portfolio.holdings())
+    return {"ok": True, "new": new, "ticker": t, "name": name, "kind": kind, "portfolio_weight_total": round(total, 2)}
+
+
+def _warm_company(t: str) -> None:
+    from . import companies
+
+    try:
+        prices.fetch_eod([t])
+        companies.get(t)
+    except Exception as e:  # a slow source must not surface as an error: the radar shows the tile without data
+        logging.info("warming %s failed: %s", t, e)
+
+
+@app.delete("/api/holdings/{ticker}")
+def holdings_remove(ticker: str) -> dict[str, Any]:
+    if not store.holding_remove(ticker.upper()):
+        raise HTTPException(404, "Not on your radar or research list")
+    return {"ok": True}
+
+
+# ---- Scoring: FINN's defaults, editable per investor ----------------------------
+@app.get("/api/scoring")
+def scoring_get() -> dict[str, Any]:
+    return {"groups": scoring.schema()}
+
+
+@app.put("/api/scoring/{group}")
+def scoring_put(group: str, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    try:
+        return scoring.save(group, body.get("values") or {})
+    except KeyError:
+        raise HTTPException(404, "Unknown scoring section")
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Values must be numbers")
+
+
+@app.delete("/api/scoring/{group}")
+def scoring_reset(group: str) -> dict[str, Any]:
+    try:
+        return scoring.reset(group)
+    except KeyError:
+        raise HTTPException(404, "Unknown scoring section")
 
 
 @app.post("/api/push/test")
@@ -416,7 +594,7 @@ def push_test() -> dict[str, Any]:
     from . import notify
 
     r = notify.send("FINN is connected", "Alerts on your portfolio will arrive here: results, management changes, unusual moves.",
-                    url="/", tag="finn-test")
+                    url="/", tag=f"finn-test-{int(time.time())}", kind="test")
     return {**r, "devices": len(store.push_subs_for())}
 
 

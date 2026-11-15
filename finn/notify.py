@@ -51,12 +51,18 @@ def keys() -> tuple[str, str]:
     return b64(der), b64(raw)
 
 
-def send(title: str, body: str, url: str = "/", tag: str | None = None, user_id: str | None = None) -> dict:
+def send(title: str, body: str, url: str = "/", tag: str | None = None, user_id: str | None = None,
+         kind: str = "alert") -> dict:
+    """Every notification lands in the in-app inbox; devices with alerts on also get a push."""
+    store.inbox_add(kind, title, body, url, tag, user_id)
+    subs = store.push_subs_for(user_id)
+    if not subs:
+        return {"sent": 0, "expired": 0, "failed": 0, "inbox": True}
     from pywebpush import WebPushException, webpush
 
     priv, _ = keys()
     ok = gone = failed = 0
-    for sub in store.push_subs_for(user_id):
+    for sub in subs:
         try:
             webpush(subscription_info=sub, data=json.dumps({"title": title, "body": body, "url": url, "tag": tag}),
                     vapid_private_key=priv, vapid_claims={"sub": SUBJECT}, ttl=6 * 3600)
@@ -72,7 +78,7 @@ def send(title: str, body: str, url: str = "/", tag: str | None = None, user_id:
         except Exception as e:  # unreachable endpoint, bad key...: one broken device must not block the others
             failed += 1
             log.warning("push to a device failed: %s", e)
-    return {"sent": ok, "expired": gone, "failed": failed}
+    return {"sent": ok, "expired": gone, "failed": failed, "inbox": True}
 
 
 def _message(i: dict) -> tuple[str, str]:
@@ -86,9 +92,8 @@ def _message(i: dict) -> tuple[str, str]:
 
 
 def dispatch(user_id: str | None = None) -> dict:
-    """Push anything new and important since the last dispatch. Safe to call after every refresh."""
-    if not store.push_subs_for(user_id):
-        return {"sent": 0, "reason": "no devices subscribed"}
+    """Notify about anything new and important since the last dispatch (inbox always, push where a device
+    is registered). Safe to call after every refresh."""
     b = push.brief("24h", "critical")
     candidates = [i for i in b["items"] if i["tier"] == "critical" and i.get("alert")]
     candidates += [{**a, "category_label": "Price/volume", "one_liner": a["title"]} for a in b["alerts"]]
@@ -96,7 +101,8 @@ def dispatch(user_id: str | None = None) -> dict:
     sent = 0
     for c in fresh[:5]:  # never a burst
         title, body = _message(c)
-        r = send(title, body, url=f"/#/c/{c['ticker']}", tag=c["id"], user_id=user_id)
+        r = send(title, body, url=f"/#/c/{c['ticker']}", tag=c["id"], user_id=user_id,
+                 kind="move" if c.get("kind") == "price_volume" else "filing")
         sent += r["sent"]
     store.notified_mark([c["id"] for c in fresh], user_id)
     return {"sent": sent, "items": len(fresh)}

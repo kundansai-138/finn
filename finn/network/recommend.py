@@ -69,12 +69,13 @@ PRIORS = {
 REACH_FLOOR, FRESH_FLOOR = 0.35, 0.6
 
 
-def push_value(p_rel: float, f: dict[str, float]) -> tuple[float, dict[str, float]]:
+def push_value(p_rel: float, f: dict[str, float], reach_floor: float = REACH_FLOOR,
+               fresh_floor: float = FRESH_FLOOR) -> tuple[float, dict[str, float]]:
     """Multiply in odds space, not on saturated probabilities: relevance probabilities for qualified
     people all sit at 0.95-0.99, so a raw product would let reachability swamp real differences in
     relevance. log EV = logit(P help) + ln(reach) + ln(fresh): reach is worth at most ~1 log-odds unit."""
-    reach = REACH_FLOOR + (1 - REACH_FLOOR) * f["warmth"]
-    fresh = FRESH_FLOOR + (1 - FRESH_FLOOR) * f["recency"]
+    reach = reach_floor + (1 - reach_floor) * f["warmth"]
+    fresh = fresh_floor + (1 - fresh_floor) * f["recency"]
     z = math.log(max(p_rel, 1e-9) / max(1 - p_rel, 1e-9)) + math.log(reach) + math.log(fresh)
     return 1 / (1 + math.exp(-z)), {"relevance": round(p_rel, 3), "reachable": round(reach, 3), "fresh": round(fresh, 3)}
 PRIOR = PRIORS["pull"]
@@ -243,10 +244,13 @@ class Index:
                 parts += [r["title"], o.get("name", ""), r.get("function", "")] + o.get("themes", [])
             docs.append(" ".join(parts))
         self.vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), sublinear_tf=True)
-        self.X = self.vec.fit_transform(docs)
+        try:
+            self.X = self.vec.fit_transform(docs)
+        except ValueError:   # a new investor with no contacts yet: nothing to match text against
+            self.vec, self.X = None, None
 
     def text_sim(self, text: str) -> np.ndarray:
-        if not text.strip():
+        if not text.strip() or self.vec is None:
             return np.zeros(len(self.contacts))
         q = self.vec.transform([text])
         return (self.X @ q.T).toarray().ravel()
@@ -274,7 +278,10 @@ def _stored() -> dict:
 
 
 def weights(mode: str = "pull") -> dict[str, float]:
-    return {**PRIORS[mode], **(_stored().get(mode) or {})}
+    """FINN's defaults, then the investor's own edits (Settings, Scoring), then what their taps taught it."""
+    from .. import scoring
+
+    return {**scoring.prior(mode), **(_stored().get(mode) or {})}
 
 
 def _score(f: dict[str, float], w: dict[str, float]) -> tuple[float, dict[str, float]]:
@@ -504,6 +511,8 @@ def _recommend(org: str | None, theme: str | None, event: str | None, text: str,
                diversify: bool, mode: str = "pull") -> list[dict[str, Any]]:
     ix = index()
     net = ix.net
+    if not ix.contacts:   # a new investor's empty network: nobody to rank yet
+        return []
     q = Query(org=org, theme=theme.lower() if theme else None, event=event, text=text or "", mode=mode)
     o = net.orgs.get(org or "", {})
     qthemes = (list(o.get("themes", [])) + ([q.theme] if q.theme and q.theme in ix.t_idx else [])
@@ -543,6 +552,10 @@ def _recommend(org: str | None, theme: str | None, event: str | None, text: str,
 
     # Stage 2: ranking
     w = weights(mode)
+    if mode == "push":
+        from .. import scoring
+
+        floors = scoring.values("push")
     scored = []
     for pid in cands:
         i = ix.contacts.index(pid)
@@ -552,7 +565,7 @@ def _recommend(org: str | None, theme: str | None, event: str | None, text: str,
         p_, contrib = _score(f, w)
         parts = None
         if mode == "push":
-            p_, parts = push_value(p_, f)
+            p_, parts = push_value(p_, f, floors["reach_floor"], floors["fresh_floor"])
         if p_ < min_score:
             continue
         scored.append((p_, pid, f, ctx, contrib, parts))
@@ -607,8 +620,10 @@ def feedback(person_id: str, query: dict, label: int) -> dict[str, Any]:
     # Recompute features exactly as they were scored
     recs = {r["person"]["id"]: r for r in _recommend(q.org, q.theme, q.event, q.text, 50, 0.0, False, mode)}
     f = recs.get(person_id, {}).get("features") or dict.fromkeys(FEATURES, 0.0)
+    from .. import scoring
+
     w = weights(mode)
-    prior = PRIORS[mode]
+    prior = scoring.prior(mode)   # L2 pulls towards the investor's own starting point, not FINN's
     p_, _ = _score(f, w)   # push: learn P(help); reach and freshness stay fixed and explainable
     err = float(label) - p_
     for kk in FEATURES:
@@ -627,6 +642,10 @@ def feedback(person_id: str, query: dict, label: int) -> dict[str, Any]:
 
 def model_card(mode: str = "pull") -> dict[str, Any]:
     w = weights(mode)
-    return {"mode": mode, "features": [{"feature": k, "label": FEATURE_LABEL[k], "prior": PRIORS[mode][k], "learned": round(w[k], 3)}
+    from .. import scoring
+
+    pr = scoring.prior(mode)
+    return {"mode": mode, "features": [{"feature": k, "label": FEATURE_LABEL[k], "prior": pr[k], "default": PRIORS[mode][k],
+                                        "learned": round(w[k], 3)}
                                        for k in FEATURES],
             "bias": round(w["bias"], 3), "n_feedback": store.reco_feedback_count()}

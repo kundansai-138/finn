@@ -149,6 +149,27 @@ understand ─► plan ─► execute (parallel tools) ─┬─► answer ─�
 - Profile data comes only from sources the investor can legitimately use: their own contacts and LinkedIn data export (consent: their own relationships), public filings (appointees' "brief profile" is a mandatory disclosure), or a licensed people-data provider. No scraping of LinkedIn.
 - Retention: enrichment refreshed every 90 days, and a contact's derived data is deleted when the contact is removed. LLM calls are logged with a hash of the prompt, not its contents.
 
+### Accounts, notifications and editable scoring
+
+- **Who is asking** ([finn/auth.py](../finn/auth.py)):
+  - a session cookie (HttpOnly, SameSite=Lax, 30 days; only its SHA-256 is stored, so a leaked table can't be replayed);
+  - else, in development, the `X-FINN-User` header;
+  - else the guest demo.
+  - `FINN_AUTH_STRICT=on` drops the header.
+- **Passwords:** stdlib scrypt with a per-user salt, in a table under the same row-level security as everything else. Five failed sign-ins per username per 10 minutes, then a 429.
+- **Alerts follow the account.**
+  - A device's push subscription is stored under whoever is signed in.
+  - Signing in or out on a device moves the registration and clears cached API responses.
+  - The scheduler pushes to every user with a registered device, each run in that user's own database scope, so one user's failure never blocks another.
+- **The radar is the investor's own.**
+  - Add any NSE-listed company (as a holding with a weight, or watch-only), or remove one.
+  - The shared refresh fetches filings for every ticker anyone holds. It keeps only the set of tickers, nothing linking them to who holds them.
+- **Scoring starts from FINN's defaults and is editable per investor** ([finn/scoring.py](../finn/scoring.py)). There are four sections, matching the four engines in [SCORING.md](SCORING.md).
+  - Only differences from the defaults are stored, so a better default still reaches everyone who hasn't changed that value.
+  - Values are clamped to their ranges.
+  - Weights that are shares of a whole are normalised.
+  - Saving a ranking section replaces what FINN had learned from that investor's feedback taps: the edit becomes the new starting point, and later taps learn from there.
+
 ## 5. Database: why PostgreSQL
 
 FINN's data has three shapes: relational personal data that must be isolated per user, reference market data (time series, documents, chunks), and caches.
@@ -223,7 +244,7 @@ The first version showed every fact on every card (one CFO-change card carried a
 ## 8. Deliberately out of scope (for now)
 
 - Real-time intraday data.
-- Real authentication: identity is a header in the prototype; production would use OAuth, with RLS already enforcing the boundary.
+- Single sign-on (Google, Microsoft) and password reset by email: accounts are username and password, created in the app or with `scripts/create_user.py`.
 - A separate worker process and queue for ingestion.
 - Segment-level revenue mix.
 - Embeddings in pgvector: the table and extension are ready, waiting on an embedding provider.

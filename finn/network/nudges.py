@@ -134,6 +134,10 @@ def hooks(net: Network, days: int = HOOK_DAYS) -> dict[str, list[dict]]:
 
 
 def compute(limit: int = 6, include_all: bool = False) -> list[dict[str, Any]]:
+    from .. import scoring
+
+    s = scoring.values("nudges")   # FINN's defaults, or the investor's own (Settings, Scoring)
+    wu, wv, wh, min_pri = s["w_urgency"], s["w_value"], s["w_hook"], s["min_priority"]
     net = get_network()
     today = _today()
     value = portfolio_value(net)
@@ -164,8 +168,8 @@ def compute(limit: int = 6, include_all: bool = False) -> list[dict[str, Any]]:
                             "id": a["id"], "strength": round(strength, 2)}
         v, vwhy = value.get(pid, (0.0, ""))
         u = urgency(overdue) if not lead else (0.5 if overdue >= 0.5 else 0.0)
-        pri = W_URGENCY * u + W_VALUE * v + W_HOOK * hs
-        due = (overdue >= 1 and pri >= MIN_PRIORITY) or (hs >= 0.6 and overdue >= 0.6) or (lead and overdue >= 0.5)
+        pri = wu * u + wv * v + wh * hs
+        due = (overdue >= 1 and pri >= min_pri) or (hs >= 0.6 and overdue >= 0.6) or (lead and overdue >= 0.5)
         if not due and not include_all:
             continue
         first = p["name"].split()[0]
@@ -191,9 +195,9 @@ def compute(limit: int = 6, include_all: bool = False) -> list[dict[str, Any]]:
             "person": net.person_card(pid), "warmth": net.warmth(pid), "lead": lead,
             "days_since": days, "cadence_days": cad, "overdue": round(overdue, 2),
             "scores": {"urgency": round(u, 2), "value": round(v, 2), "hook": round(hs, 2), "priority": round(pri, 3)},
-            "contributions": [{"feature": "urgency", "label": "Past your usual rhythm", "value": round(W_URGENCY * u, 2)},
-                              {"feature": "value", "label": "Matters to your portfolio", "value": round(W_VALUE * v, 2)},
-                              {"feature": "hook", "label": "A reason to call now", "value": round(W_HOOK * hs, 2)}],
+            "contributions": [{"feature": "urgency", "label": "Past your usual rhythm", "value": round(wu * u, 2)},
+                              {"feature": "value", "label": "Matters to your portfolio", "value": round(wv * v, 2)},
+                              {"feature": "hook", "label": "A reason to call now", "value": round(wh * hs, 2)}],
             "hook": hook, "intro": intro, "reason": " ".join(parts), "due": due,
         })
     out.sort(key=lambda x: -x["scores"]["priority"])
@@ -204,20 +208,22 @@ def dispatch(user_id: str | None = None) -> dict[str, Any]:
     """Push the most important nudge or two. At most one push per person every two weeks."""
     from .. import notify
 
-    if not store.push_subs_for(user_id):
-        return {"sent": 0, "reason": "no devices subscribed"}
     week = _today().isocalendar()
     sentinel = f"nudges-week:{week[0]}-{week[1]}"
     if store.notified_filter([sentinel], user_id):   # the weekly cap lives here, not only in the scheduler
         return {"sent": 0, "items": 0, "reason": "already nudged this week"}
-    items = [n for n in compute(limit=10) if n["scores"]["priority"] >= PUSH_PRIORITY]
+    from .. import scoring
+
+    bar = scoring.values("nudges")["push_priority"]
+    items = [n for n in compute(limit=10) if n["scores"]["priority"] >= bar]
     ids = {n["person"]["id"]: f"nudge:{n['person']['id']}:{week[0]}-{(week[1] - 1) // 2}" for n in items}
     seen = set(store.notified_filter(list(ids.values()), user_id))
     fresh = [n for n in items if ids[n["person"]["id"]] not in seen][:2]
     sent = 0
     for n in fresh:
         title = f"{'Introduce yourself to' if n['lead'] else 'Reconnect with'} {n['person']['name']}"
-        r = notify.send(title, n["reason"][:220], url=f"/#/p/{n['person']['id']}", tag=ids[n["person"]["id"]], user_id=user_id)
+        r = notify.send(title, n["reason"][:220], url=f"/#/p/{n['person']['id']}", tag=ids[n["person"]["id"]], user_id=user_id,
+                        kind="nudge")
         sent += r["sent"]
     store.notified_mark([ids[n["person"]["id"]] for n in fresh] + [sentinel], user_id)
     return {"sent": sent, "items": len(fresh)}

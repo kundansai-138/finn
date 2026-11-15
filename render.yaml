@@ -25,3 +25,5 @@ services:
         value: "2"
       - key: FINN_SCHEDULER
         value: "on"
+      - key: FINN_AUTH_STRICT    # identity only from the session cookie, never the dev header
+        value: "on"

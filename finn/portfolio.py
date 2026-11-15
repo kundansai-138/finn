@@ -20,6 +20,22 @@ def holdings() -> list[dict[str, Any]]:
     return store.holdings("portfolio")
 
 
+def tracked() -> set[str]:
+    """Every ticker any investor holds: public reference data (a set of tickers, nothing linking them to
+    who holds them), so the shared refresh fetches filings for companies only a signed-in user follows."""
+    from . import db
+
+    return set(db.kv_get("tracked", "tickers") or [])
+
+
+def track(ticker: str) -> None:
+    from . import db
+
+    t = tracked()
+    if ticker not in t:
+        db.kv_put("tracked", "tickers", sorted(t | {ticker}))
+
+
 def research() -> list[dict[str, Any]]:
     return store.holdings("research")
 

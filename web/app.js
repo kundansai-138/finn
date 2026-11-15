@@ -34,7 +34,21 @@ const post = (path, body) => api(path, { method: "POST", headers: { "Content-Typ
 const first = (name) => (name || "").split(" ")[0];
 const strengthBars = (s) => (s >= 0.6 ? 3 : s >= 0.35 ? 2 : 1);
 // Sheets any screen can open (set by App on every render), so deep components needn't thread callbacks.
-const ui = { openPerson: () => {}, openDraft: () => {} };
+const ui = { openPerson: () => {}, openDraft: () => {}, openSheet: () => {}, me: null, radarChanged: () => {}, unread: 0, inboxChanged: () => {} };
+
+// Numbers count up to their value instead of popping in.
+function useCountUp(target, ms = 700) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    if (target == null || !isFinite(target)) return;
+    const t0 = performance.now(), from = 0;
+    let raf;
+    const step = (t) => { const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3); setV(from + (target - from) * e); if (k < 1) raf = requestAnimationFrame(step); };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return v;
+}
 
 const svg = (body, w = 1.7) => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width=${w} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const Icon = {
@@ -51,6 +65,8 @@ const Icon = {
   sliders: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>`,
   refresh: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6"/></svg>`,
   plus: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>`,
+  user: svg(html`<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c.9-3.6 3.7-5.6 7-5.6s6.1 2 7 5.6"/>`),
+  bell: svg(html`<path d="M6 16.5V11a6 6 0 1112 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 004 0"/>`),
 };
 
 // ---------------------------------------------------------------------------
@@ -219,18 +235,45 @@ function squarify(items, W, H) {
 }
 
 function Treemap({ tiles }) {
+  const [sel, setSel] = useState(null);
   const [ref, W] = useWidth(343);
   const H = Math.round(Math.min(340, W * 0.82));
   const nodes = useMemo(() => squarify(tiles.filter((t) => t.weight > 0).sort((a, b) => b.weight - a.weight).map((t) => ({ ...t, value: t.weight })), W, H), [tiles, W, H]);
   return html`<div ref=${ref} class="tmap" style=${`height:${H}px`} role="list" aria-label="Your holdings, sized by weight">
-    ${nodes.map((n) => {
+    ${nodes.map((n, i) => {
       const c = n.change_pct || 0, mix = c ? Math.min(42, Math.abs(c) * 15) + 6 : 0;
       const bg = `color-mix(in oklab, var(${c >= 0 ? "--pos" : "--neg"}) ${mix}%, var(--surface))`;
-      return html`<button role="listitem" class="tile ${n.status || ""}" style=${`left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;background:${bg}`}
-        aria-label=${`${n.name}, ${sgn(c, 1)}${n.status ? ", needs a look" : ""}`} onClick=${() => go(`/c/${n.ticker}`)}>
-        <span class="tt">${n.ticker}</span>${n.h >= 38 && html`<span class="tc">${sgn(c, 1)}</span>`}
+      return html`<button role="listitem" style=${`left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;background:${bg};animation-delay:${Math.min(i, 20) * 22}ms`}
+        aria-label=${`${n.name}, ${sgn(c, 1)}${n.status ? ", needs a look" : ""}`} aria-pressed=${sel?.ticker === n.ticker}
+        class=${`tile ${n.status || ""} ${sel?.ticker === n.ticker ? "sel" : ""}`}
+        onClick=${() => { haptic(8); sel?.ticker === n.ticker ? go(`/c/${n.ticker}`) : setSel(n); }}>
+        <span class="tt">${n.ticker}</span>${n.h >= 38 && html`<span class="tc">${sgn(c, 1)}</span>`}${n.h >= 58 && n.w >= 54 && html`<span class="tw">${n.weight}%</span>`}
       </button>`;
     })}
+  </div>
+  ${sel && html`<div class="peek" role="status">
+    <div><div class="pk-name">${sel.name}</div><div class="phead"><span class="tick">${sel.ticker}</span>${sel.theme ? ` · ${sel.theme}` : ""}</div></div>
+    <button class="btn sig" onClick=${() => go(`/c/${sel.ticker}`)}>Open ${Icon.chev}</button>
+    <div class="pk-stats"><span>Today <b class=${tone(sel.change_pct)}>${sgn(sel.change_pct, 1)}</b></span><span>Weight <b>${sel.weight}%</b></span>
+      ${sel.volume_x != null && html`<span>Volume <b>${sel.volume_x.toFixed(1)}×</b> avg</span>`}
+      <span>${sel.status === "filing" ? "Filed something that matters" : sel.status === "move" ? "Moved without a filing" : "Quiet"}</span></div>
+  </div>`}`;
+}
+
+function Glance({ tiles }) {
+  const w = tiles.reduce((s, t) => s + (t.weight || 0), 0) || 1;
+  const priced = tiles.filter((t) => t.change_pct != null);
+  const move = priced.reduce((s, t) => s + (t.weight || 0) * t.change_pct, 0) / w;
+  const up = priced.filter((t) => t.change_pct > 0).length, dn = priced.filter((t) => t.change_pct < 0).length;
+  const best = [...priced].sort((a, b) => b.change_pct - a.change_pct)[0], worst = [...priced].sort((a, b) => a.change_pct - b.change_pct)[0];
+  const m = useCountUp(move), u = useCountUp(up), d = useCountUp(dn);
+  if (!priced.length) return null;
+  return html`<div class="stats">
+    <div class="stat"><div class="k">Portfolio</div><div class=${`v ${tone(move)}`}>${sgn(m, 2)}</div><div class="s">weighted, today</div></div>
+    <div class="stat"><div class="k">Up · down</div><div class="v"><span class="pos">${Math.round(u)}</span> <span class="muted">·</span> <span class="neg">${Math.round(d)}</span></div>
+      <div class="mbar"><i class="up" style=${`width:${(up / priced.length) * 100}%`}></i><i class="dn" style=${`width:${(dn / priced.length) * 100}%`}></i></div></div>
+    <div class="stat"><div class="k">Movers</div>
+      ${[best, worst].filter(Boolean).map((t) => html`<div class="mover"><span class="mt">${t.ticker}</span><b class=${tone(t.change_pct)}>${sgn(t.change_pct, 1)}</b></div>`)}</div>
   </div>`;
 }
 
@@ -293,8 +336,10 @@ function RadarView({ openRules, rulesVersion }) {
     <div class="topbar">
       <div class="wordmark">FINN <small>${today}</small></div>
       <div style="display:flex;gap:2px">
-        <button class="iconbtn" aria-label="Refresh sources" onClick=${refresh} style=${busy ? "animation:spin 1s linear infinite" : ""}>${Icon.refresh}</button>
+        <button class="iconbtn" aria-label="Add a company to your radar" onClick=${() => ui.openSheet({ kind: "addco" })}>${Icon.plus}</button>
+        <${Bell} />
         <button class="iconbtn" aria-label="Alert rules and notifications" onClick=${openRules}>${Icon.sliders}</button>
+        <${AccountButton} />
       </div>
     </div>
     ${(!online || offline) && html`<div class="offline">Offline · showing your last radar${asOf ? ` from ${asOf}` : ""}</div>`}
@@ -302,7 +347,11 @@ function RadarView({ openRules, rulesVersion }) {
     ${inst.iosHint && html`<div class="installbar ios"><img src="/static/icons/icon-192.png" alt="" /><span><b>Add FINN to your Home Screen</b><br /><span class="tiny">Tap Share, then “Add to Home Screen”, to get alerts on iPhone</span></span><button class="linkish tiny" onClick=${(e) => { inst.hideHint(); e.currentTarget.parentElement.remove(); }}>Not now</button></div>`}
     ${err && html`<div class="err">Couldn't load the radar: ${err}</div>`}
     ${!d && !err && html`<div class="section"><div class="skeleton" style="height:60px;background:none;border:0;box-shadow:none"></div><div class="skeleton" style="height:280px"></div></div>`}
-    ${d && html`<div>
+    ${d?.empty && html`<div class="section"><div class="empty-hero">
+      <div class="ring">${Icon.radar}</div><h1 style="font-size:24px;margin:0 0 6px">${d.headline}</h1>
+      <p class="small" style="margin:0 auto 16px;max-width:300px">${d.sub}</p>
+      <button class="btn sig" onClick=${() => ui.openSheet({ kind: "addco" })}>${Icon.plus} Add your first company</button></div></div>`}
+    ${d && !d.empty && html`<div>
       <div class="hero">
         <h1>${d.headline}</h1>
         <p>${d.sub}</p>
@@ -310,8 +359,9 @@ function RadarView({ openRules, rulesVersion }) {
       <div class="section" style="padding-top:0">
         <div class="row" style="align-items:center;margin-bottom:6px">
           <div class="seg" role="tablist" aria-label="Time window">${WINDOWS.map((w) => html`<button role="tab" aria-selected=${w === win} class=${w === win ? "on" : ""} onClick=${() => setWin(w)}>${w}</button>`)}</div>
-          <span class="tiny muted">tap a tile to open it</span>
+          <span class="tiny muted">tap a tile to peek</span>
         </div>
+        <${Glance} tiles=${d.tiles} />
         <${Treemap} tiles=${d.tiles} />
         <div class="legend2"><span><i class="lg-filing"></i>filed something that matters</span><span><i class="lg-move"></i>moved, no filing</span><span>size = weight</span></div>
       </div>
@@ -396,7 +446,8 @@ function HoldingView({ ticker, openPerson }) {
         ${p.volume_x != null && html`<span class="tiny muted">vol ${p.volume_x.toFixed(1)}×</span>`}</div>`}
       ${pos52 != null && html`<div class="range52"><div class="rbar"><i style=${`left:${pos52}%`}></i></div><div class="row tiny muted"><span>52w low ${num(p.low_52w)}</span><span>high ${num(p.high_52w)}</span></div></div>`}
       <div class="hstatus">${d.in_portfolio ? html`<span class="chip">${d.weight}% of portfolio</span>` : html`<span class="chip">Research list</span>`}
-        ${need ? html`<span class="badge need">Needs a look</span>` : html`<span class="tiny muted">Nothing urgent</span>`}</div>
+        ${need ? html`<span class="badge need">Needs a look</span>` : html`<span class="tiny muted">Nothing urgent</span>`}
+        <${RadarMembership} ticker=${ticker} name=${d.name} held=${d.in_portfolio} /></div>
     </div>
     <div class="seg3" role="tablist" aria-label="Holding sections">${[["updates", "Updates"], ["condition", "Condition"], ["network", "Network"]].map(([k, l]) =>
       html`<button role="tab" aria-selected=${cur === k} class=${cur === k ? "on" : ""} onClick=${() => setTab(k)}>${l}${k === "updates" && need ? html`<i class="sdot"></i>` : ""}</button>`)}</div>
@@ -633,8 +684,8 @@ function WebContext({ i, openPerson }) {
 // ---------------------------------------------------------------------------
 // Flow 3: add people (keep-in-touch nudges now live in the People to-do list)
 // ---------------------------------------------------------------------------
-function AddContact({ onAdded }) {
-  const [open, setOpen] = useState(false);
+function AddContact({ onAdded, startOpen = false }) {
+  const [open, setOpen] = useState(startOpen);
   const [f, setF] = useState({ name: "", title: "", org_name: "", context: "", last_contact: new Date().toISOString().slice(0, 10), tie_type: "met" });
   const [msg, setMsg] = useState("");
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -760,7 +811,8 @@ function PeopleView({ openPerson, openAsk }) {
   const hot = new Set((todo?.items || []).slice(0, 4).map((t) => t.person.id));   // the four the list shows first
   const count = (l) => (net ? net.people.filter((p) => p.warmth.label === l).length : 0);
   return html`<div>
-    <div class="topbar"><div class="wordmark">People <small>${net ? `${net.people.length} in your network` : ""}</small></div></div>
+    <div class="topbar"><div class="wordmark">People <small>${net ? `${net.people.length} in your network` : ""}</small></div>
+      <div style="display:flex;gap:2px"><button class="iconbtn" aria-label="Add someone to your network" onClick=${() => ui.openSheet({ kind: "addperson", onAdded: () => setV((x) => x + 1) })}>${Icon.plus}</button><${AccountButton} /></div></div>
     <div class="section" style="padding-top:0">
       <div class="section-h" style="margin-top:6px"><h2>To do</h2><span class="tiny muted">${todo?.items?.length ? `${todo.items.length} people` : ""}</span></div>
       <${Todo} d=${todo} setD=${setTodo} />
@@ -772,7 +824,8 @@ function PeopleView({ openPerson, openAsk }) {
       <div style="margin:12px 0 4px"><${AddContact} onAdded=${() => setV(v + 1)} /></div>
       ${net?.themes?.length > 0 && html`<div class="section-h"><h2>Who knows what</h2><span class="tiny muted">tap to ask</span></div>
         <div class="suggest wrap" style="padding-top:0">${net.themes.map((t) => html`<button onClick=${() => openAsk(`Who knows ${t.theme}?`)}>${t.theme} <span class="muted">${t.people.length}</span></button>`)}</div>`}
-      <div style="margin-top:14px"><${Fold} title="How FINN ranks people" hint="the model"><${ModelCard} /><//></div>
+      <div style="margin-top:14px"><${Fold} title="How FINN ranks people" hint="the model"><${ModelCard} />
+        <button class="btn" style="margin-top:10px" onClick=${() => ui.openSheet({ kind: "scoring" })}>${Icon.sliders} Edit scoring</button><//></div>
     </div>
   </div>`;
 }
@@ -802,7 +855,8 @@ function PhoneAlerts() {
   };
   const test = async () => { const r = await api("/api/push/test", { method: "POST" }); setMsg(r.sent ? "Test alert sent. Check your notifications." : "No device received it yet."); };
   return html`<div class="rule-group phone">
-    <div class="upper muted">Alerts on this phone</div>
+    <div class="upper muted">Alerts on this phone${ui.me && !ui.me.guest ? ` · for ${ui.me.name}` : ""}</div>
+    ${ui.me?.guest && html`<p class="tiny muted" style="margin:4px 0 0">You're on the demo account. <button class="linkish tiny" onClick=${() => ui.openSheet({ kind: "account" })}>Sign in</button> so alerts follow your own radar.</p>`}
     ${!st.supported ? html`<p class="small ink2" style="margin:6px 0">${st.reason === "ios-install" ? "On iPhone, add FINN to your Home Screen first (Share, then Add to Home Screen). Then turn alerts on here." : "This browser can't receive push alerts."}</p>`
       : html`<div class="switchrow"><span class="small">Critical filings and your price/volume triggers, on the lock screen</span>
           <button class=${`switch ${st.on ? "on" : ""}`} role="switch" aria-checked=${st.on} aria-label="Phone alerts" disabled=${busy} onClick=${toggle}><i></i></button></div>
@@ -1309,13 +1363,222 @@ function AgentGraph({ g }) {
 }
 
 // ---------------------------------------------------------------------------
+// Accounts: sign in, create an account, sign out. Alerts follow the account on this device.
+// ---------------------------------------------------------------------------
+function AccountButton() {
+  const me = ui.me;
+  return html`<button class="iconbtn acct" aria-label=${me && !me.guest ? `Account: ${me.name}` : "Sign in"} onClick=${() => ui.openSheet({ kind: "account" })}>
+    ${me && !me.guest ? html`<span class="acct-i">${me.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}</span>` : Icon.user}</button>`;
+}
+
+// Switching accounts on one device: the push registration belongs to an account, and cached API
+// responses belong to whoever fetched them, so both move with the sign-in.
+async function switchAccount(doIt) {
+  let wasOn = false;
+  try { const st = await pushState(); wasOn = !!st.on; if (wasOn) await disablePush(); } catch {}
+  const r = await doIt();
+  try {
+    for (const k of await caches.keys()) {
+      const c = await caches.open(k);
+      for (const req of await c.keys()) if (new URL(req.url).pathname.startsWith("/api/")) await c.delete(req);
+    }
+  } catch {}
+  radarCache = null;
+  if (wasOn) { try { await enablePush(); } catch {} }
+  location.hash = "#/";
+  location.reload();
+  return r;
+}
+
+function AccountSheet({ openScoring }) {
+  const me = ui.me;
+  const [mode, setMode] = useState("signin");
+  const [f, setF] = useState({ username: "", password: "", name: "", start_from_demo: true });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  const submit = async (e) => {
+    e.preventDefault(); setErr(""); setBusy(true);
+    try { await switchAccount(() => post(mode === "signin" ? "/api/auth/login" : "/api/auth/register", f)); }
+    catch (x) { setErr(x.message); setBusy(false); }
+  };
+  if (me && !me.guest) return html`<div>
+    <div class="person" style="align-items:center"><div class="avatar lg">${me.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}</div>
+      <div><h2 style="margin:0">${me.name}</h2><div class="phead">Signed in as ${me.user}</div></div></div>
+    <${PhoneAlerts} />
+    <div class="row-btns" style="margin-top:12px"><button class="btn" onClick=${openScoring}>${Icon.sliders} Scoring</button>
+      <button class="btn" onClick=${() => switchAccount(() => post("/api/auth/logout", {}))}>Sign out</button></div>
+    <p class="tiny muted" style="margin-top:12px">Your radar, network, scoring and alerts are yours alone: the database only ever shows this account its own rows.</p>
+  </div>`;
+  return html`<div>
+    <h2>${mode === "signin" ? "Sign in" : "Create an account"}</h2>
+    <p class="small muted" style="margin-top:0">You're looking at the demo investor. Sign in to keep your own radar and network, and to get alerts on this phone.</p>
+    <form class="addform" onSubmit=${submit}>
+      <label>Username<input required autocomplete="username" autocapitalize="none" spellcheck="false" value=${f.username} onInput=${set("username")} /></label>
+      ${mode === "register" && html`<label>Your name<input autocomplete="name" value=${f.name} onInput=${set("name")} /></label>`}
+      <label>Password<input required type="password" minlength=${mode === "register" ? 8 : 1} autocomplete=${mode === "signin" ? "current-password" : "new-password"} value=${f.password} onInput=${set("password")} /></label>
+      ${mode === "register" && html`<label class="check"><input type="checkbox" checked=${f.start_from_demo} onChange=${set("start_from_demo")} />Start from the demo portfolio and network (you can change everything)</label>`}
+      ${err && html`<div class="err" style="margin:0">${err}</div>`}
+      <button class="pbtn" type="submit" disabled=${busy}>${busy ? "One moment…" : mode === "signin" ? "Sign in" : "Create account"}</button>
+    </form>
+    <button class="linkish small tap" onClick=${() => { setMode(mode === "signin" ? "register" : "signin"); setErr(""); }}>${mode === "signin" ? "New here? Create an account" : "Have an account? Sign in"}</button>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// The radar: add a company, remove one
+// ---------------------------------------------------------------------------
+function AddCompanySheet({ close, preset }) {
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState([]);
+  const [pick, setPick] = useState(preset || null);
+  const [kind, setKind] = useState("portfolio");
+  const [w, setW] = useState("2");
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    if (q.trim().length < 2) { setRes([]); return; }
+    const k = setTimeout(() => api(`/api/universe/search?q=${encodeURIComponent(q.trim())}`).then((r) => setRes(r.results)).catch(() => setRes([])), 180);
+    return () => clearTimeout(k);
+  }, [q]);
+  const add = async () => {
+    setMsg("");
+    try {
+      const r = await post("/api/holdings", { ticker: pick.ticker, kind, weight: kind === "portfolio" ? w : null });
+      haptic(15); radarCache = null; ui.radarChanged();
+      setMsg(`${r.name} ${kind === "portfolio" ? "is on your radar" : "is on your research list"}. Its filings and prices load in the background.`);
+      setTimeout(() => { close(); go(kind === "portfolio" ? "/" : "/research"); }, 1100);
+    } catch (e) { setMsg(e.message); }
+  };
+  return html`<div>
+    <h2>Add a company</h2>
+    ${!pick ? html`<div>
+      <label class="searchbox">${Icon.search}<input value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Ticker or company name" aria-label="Search NSE companies" autocomplete="off" autocapitalize="characters" /></label>
+      <div class="card list">${res.map((r) => html`<div class="list-row" onClick=${() => setPick(r)}>
+        <div style="min-width:0"><div class="pname clamp1">${r.name}</div><div class="phead"><span class="tick">${r.ticker}</span>${r.on ? ` · ${r.on === "portfolio" ? "on your radar" : "on your research list"}` : ""}</div></div>
+        <span class="muted chev">${Icon.plus}</span></div>`)}
+        ${q.trim().length >= 2 && !res.length && html`<p class="small muted">No NSE-listed company matches.</p>`}
+        ${q.trim().length < 2 && html`<p class="small muted">Any NSE-listed company. Type at least two letters.</p>`}</div></div>`
+    : html`<div class="card">
+      <div class="pname">${pick.name}</div><div class="phead"><span class="tick">${pick.ticker}</span></div>
+      <div class="seg" role="tablist" style="margin:12px 0" aria-label="Where to add it">${[["portfolio", "I hold it"], ["research", "Watch only"]].map(([k, l]) =>
+        html`<button role="tab" aria-selected=${kind === k} class=${kind === k ? "on" : ""} onClick=${() => setKind(k)}>${l}</button>`)}</div>
+      ${kind === "portfolio" ? html`<label class="addform" style="display:grid"><span class="tiny muted">Weight in your portfolio</span>
+          <div class="row" style="gap:8px"><input type="number" inputmode="decimal" min="0.1" max="100" step="0.1" value=${w} onInput=${(e) => setW(e.target.value)} style="max-width:110px" /><span class="small">%</span></div></label>
+          <p class="tiny muted">Sizes its tile on the radar and how much its filings count.</p>`
+        : html`<p class="tiny muted">On your research list: its dossier and people, without radar alerts.</p>`}
+      <div class="row-btns"><button class="btn sig" onClick=${add}>${kind === "portfolio" ? "Add to radar" : "Add to research list"}</button>${!preset && html`<button class="btn" onClick=${() => setPick(null)}>Back</button>`}</div>
+    </div>`}
+    ${msg && html`<p class="small ink2" role="status">${msg}</p>`}
+  </div>`;
+}
+
+function RadarMembership({ ticker, name, held }) {
+  const [sure, setSure] = useState(false);
+  const [gone, setGone] = useState(false);
+  if (gone) return html`<span class="tiny muted">Removed</span>`;
+  if (!held) return html`<button class="linkish tiny tap" onClick=${() => ui.openSheet({ kind: "addco", preset: { ticker, name } })}>${Icon.plus} Add to radar</button>`;
+  const remove = async () => {
+    if (!sure) { setSure(true); setTimeout(() => setSure(false), 3000); return; }
+    await api(`/api/holdings/${ticker}`, { method: "DELETE" }); haptic(15); radarCache = null; ui.radarChanged(); setGone(true);
+  };
+  return html`<button class="linkish tiny tap" onClick=${remove}>${sure ? "Tap again to remove" : "Remove from radar"}</button>`;
+}
+
+// ---------------------------------------------------------------------------
+// Scoring: FINN's defaults, editable per investor
+// ---------------------------------------------------------------------------
+const NOT_SHARE = new Set(["min_priority", "push_priority", "min_fit", "reach_floor", "fresh_floor"]);
+
+function ScoringSheet() {
+  const [g, setG] = useState(null);
+  const [vals, setVals] = useState({});
+  const [msg, setMsg] = useState({});
+  const load = (groups) => { setG(groups); setVals(Object.fromEntries(groups.map((x) => [x.id, Object.fromEntries(x.fields.map((f) => [f.key, f.value]))]))); };
+  useEffect(() => { api("/api/scoring").then((r) => load(r.groups)).catch(() => setG([])); }, []);
+  if (!g) return html`<div class="loading">Loading…</div>`;
+  const put = (gid, k, v) => setVals({ ...vals, [gid]: { ...vals[gid], [k]: +v } });
+  const done = (gid, r, text) => { setG(g.map((x) => (x.id === gid ? r : x))); setVals({ ...vals, [gid]: Object.fromEntries(r.fields.map((f) => [f.key, f.value])) }); setMsg({ ...msg, [gid]: text }); haptic(10); };
+  const save = async (gid) => done(gid, await api(`/api/scoring/${gid}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: vals[gid] }) }),
+    gid === "pull" || gid === "push" ? "Saved. This is now your starting point (it replaces what FINN had learned from your taps)." : "Saved. Rankings use your weights now.");
+  const reset = async (gid) => done(gid, await api(`/api/scoring/${gid}`, { method: "DELETE" }), "Back to FINN's defaults.");
+  return html`<div>
+    <h2>Scoring</h2>
+    <p class="small muted" style="margin-top:0">Every ranking starts from FINN's defaults. Move what matters to you; the tick marks the default.</p>
+    ${g.map((grp) => {
+      const v = vals[grp.id];
+      const shares = grp.fields.filter((f) => grp.kind === "shares" && !NOT_SHARE.has(f.key));
+      const tot = shares.reduce((s, f) => s + (v[f.key] || 0), 0) || 1;
+      return html`<${Fold} title=${grp.label} hint=${grp.customised ? "yours" : "default"}>
+        <p class="tiny muted" style="margin-top:0">${grp.about}</p>
+        ${grp.fields.map((f) => {
+          const isShare = grp.kind === "shares" && !NOT_SHARE.has(f.key);
+          const pct = (x) => ((x - f.min) / (f.max - f.min)) * 100;
+          return html`<div class="sfield">
+            <div class="row"><span class="small">${f.label}</span><b class="num small">${isShare ? `${Math.round((v[f.key] / tot) * 100)}%` : (+v[f.key]).toFixed(f.step < 0.1 ? 2 : 1)}</b></div>
+            <div class="srange"><input type="range" min=${f.min} max=${f.max} step=${f.step} value=${v[f.key]} aria-label=${f.label} onInput=${(e) => put(grp.id, f.key, e.target.value)} />
+              <u style=${`left:${pct(f.default)}%`} title=${`default ${f.default}`}></u></div>
+            <div class="tiny muted">${f.help}${Math.abs(v[f.key] - f.default) > 1e-9 ? ` · default ${f.default}` : ""}</div>
+          </div>`;
+        })}
+        <div class="row-btns"><button class="btn sig" onClick=${() => save(grp.id)}>Save</button><button class="btn" onClick=${() => reset(grp.id)}>Reset to default</button></div>
+        ${msg[grp.id] && html`<p class="tiny ink2" role="status">${msg[grp.id]}</p>`}
+      <//>`;
+    })}
+    <p class="tiny muted">How each score works: docs/SCORING.md in the repository.</p>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Notifications: the bell, and an inbox of everything FINN alerted you about
+// ---------------------------------------------------------------------------
+function Bell() {
+  const n = ui.unread;
+  return html`<button class="iconbtn bell" aria-label=${n ? `Notifications, ${n} unread` : "Notifications"} onClick=${() => { haptic(6); ui.openSheet({ kind: "inbox" }); }}>
+    ${Icon.bell}${n > 0 && html`<span class="dot-n">${n > 9 ? "9+" : n}</span>`}</button>`;
+}
+
+const DAY = 864e5;
+function InboxSheet({ close }) {
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const load = () => api("/api/notifications").then(setD).catch(() => setD({ items: [], unread: 0 }));
+  useEffect(() => { load(); }, []);
+  const open = async (it) => {
+    if (!it.read) { await post("/api/notifications/read", { ids: [it.id] }).catch(() => {}); ui.inboxChanged(); }
+    close(); if (it.url) location.hash = it.url.replace(/^\/#/, "");
+  };
+  const readAll = async () => { await post("/api/notifications/read", {}); haptic(10); ui.inboxChanged(); load(); };
+  const check = async () => {
+    setBusy(true); setMsg("");
+    try { const r = await post("/api/notifications/check", {}); setMsg(r.new ? `${r.new} new` : "Nothing new since the last check."); ui.inboxChanged(); load(); }
+    catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  };
+  if (!d) return html`<div class="loading">Loading…</div>`;
+  const now = Date.now(), groups = [["Today", (it) => now - it.at * 1000 < DAY], ["This week", (it) => now - it.at * 1000 < 7 * DAY], ["Earlier", () => true]];
+  const seen = new Set();
+  return html`<div>
+    <div class="row" style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">Notifications</h2>
+      ${d.unread > 0 && html`<button class="linkish small tap" onClick=${readAll}>Mark all read</button>`}</div>
+    <p class="small muted" style="margin:4px 0 10px">Critical filings, your price and volume triggers, and people worth calling.${d.devices ? ` Also pushed to ${d.devices} device${d.devices > 1 ? "s" : ""}.` : " Turn on alerts below to get them on your lock screen too."}</p>
+    <div class="row-btns" style="margin-bottom:6px"><button class="btn" disabled=${busy} onClick=${check}>${busy ? "Checking…" : "Check for news now"}</button>${msg && html`<span class="tiny ink2" role="status">${msg}</span>`}</div>
+    ${!d.items.length && html`<div class="empty-hero" style="margin-top:12px"><div class="ring">${Icon.bell}</div><b>Nothing yet</b>
+      <p class="small" style="margin:6px 0 0">When something on your radar needs you, it lands here first.</p></div>`}
+    ${groups.map(([label, f]) => { const rows = d.items.filter((it) => !seen.has(it.id) && f(it)); rows.forEach((it) => seen.add(it.id));
+      return rows.length > 0 && html`<div><div class="ibx-group">${label}</div>${rows.map((it) => html`<div class=${`ibx-row ${it.read ? "" : "unread"}`} role="link" tabindex="0" onClick=${() => open(it)}>
+        <i class="k"></i><div><div class="t">${it.title}</div><div class="b">${it.body}</div><div class="tiny muted">${ago(new Date(it.at * 1000).toISOString())}</div></div></div>`)}</div>`; })}
+    <div style="margin-top:14px"><${PhoneAlerts} /></div>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // Tabs + App
 // ---------------------------------------------------------------------------
 const TABS = [["/", "radar", "Radar"], ["/research", "research", "Research"], ["/people", "people", "People"]];
 
 function TabBar({ tab }) {
   return html`<div class="dock"><div class="dock-inner"><nav class="tabs" aria-label="Sections">${TABS.map(([p, k, l]) =>
-    html`<button class=${tab === k ? "on" : ""} aria-current=${tab === k ? "page" : null} onClick=${() => go(p)}>${Icon[k]}<span>${l}</span></button>`)}</nav></div></div>`;
+    html`<button class=${tab === k ? "on" : ""} aria-current=${tab === k ? "page" : null} onClick=${() => { if (tab !== k) haptic(6); go(p); }}>${Icon[k]}<span>${l}</span></button>`)}</nav></div></div>`;
 }
 
 function useRoute() {
@@ -1328,10 +1591,20 @@ function App() {
   const route = useRoute();
   const [sheet, setSheet] = useState(null);
   const [rulesVersion, setRulesVersion] = useState(0);
+  const [me, setMe] = useState(null);
+  useEffect(() => { api("/api/auth/me").then(setMe).catch(() => setMe({ user: "demo", name: "Demo investor", guest: true })); }, []);
+  const [unread, setUnread] = useState(0);
+  const pollInbox = () => api("/api/notifications?limit=1").then((r) => setUnread(r.unread)).catch(() => {});
+  useEffect(() => { pollInbox(); const k = setInterval(pollInbox, 60000); return () => clearInterval(k); }, []);
+  ui.unread = unread;
+  ui.inboxChanged = pollInbox;
   const openPerson = (id, ctx) => setSheet({ kind: "person", id, ctx });
   const openDraft = (ctx) => setSheet({ kind: "draft", ctx });
   ui.openPerson = openPerson;
   ui.openDraft = openDraft;
+  ui.openSheet = setSheet;
+  ui.me = me;
+  ui.radarChanged = () => setRulesVersion((v) => v + 1);
   // One word (a ticker or a name) is a lookup; anything longer is a question for the agent.
   const openAsk = (q) => (/^\s*[A-Za-z0-9&.\-]{2,20}\s*$/.test(q) ? setSheet({ kind: "ask", q }) : go(`/chat?q=${encodeURIComponent(q)}`));
   const close = () => setSheet(null);
@@ -1347,17 +1620,25 @@ function App() {
   const tab = route.startsWith("/research") ? "research" : route.startsWith("/people") || route.startsWith("/p/") ? "people" : m ? (held ? "radar" : "research") : "radar";
   useEffect(() => { if (!m && !chat) window.scrollTo(0, 0); }, [route.split("?")[0]]);   // a tab opens at its top
   return html`<div class="app">
+    <div class="view-in" key=${route.split("?")[0]}>
     ${chat ? html`<${ChatView} key=${route} params=${Object.fromEntries(new URLSearchParams(route.split("?")[1] || ""))} openPerson=${openPerson} />`
       : m ? html`<${HoldingView} key=${m[1]} ticker=${m[1].toUpperCase()} openPerson=${openPerson} />`
       : tab === "research" ? html`<${ResearchView} openAsk=${openAsk} />`
       : tab === "people" ? html`<${PeopleView} openPerson=${openPerson} openAsk=${openAsk} />`
       : html`<${RadarView} openRules=${() => setSheet({ kind: "rules" })} rulesVersion=${rulesVersion} />`}
+    </div>
     ${!chat && html`<${TabBar} tab=${tab} />`}
     ${sheet && html`<${Sheet} key=${sheet.kind + (sheet.id || "")} onClose=${close}>
       ${sheet.kind === "person" && html`<${PersonSheet} id=${sheet.id} ctx=${sheet.ctx} openPerson=${openPerson} />`}
       ${sheet.kind === "draft" && html`<${DraftSheet} ctx=${sheet.ctx} close=${close} />`}
       ${sheet.kind === "ask" && html`<${AskSheet} q=${sheet.q} openPerson=${openPerson} close=${close} />`}
       ${sheet.kind === "rules" && html`<${RulesSheet} onSaved=${() => { close(); setRulesVersion((v) => v + 1); }} />`}
+      ${sheet.kind === "account" && html`<${AccountSheet} openScoring=${() => setSheet({ kind: "scoring" })} />`}
+      ${sheet.kind === "scoring" && html`<${ScoringSheet} />`}
+      ${sheet.kind === "inbox" && html`<${InboxSheet} close=${close} />`}
+      ${sheet.kind === "addco" && html`<${AddCompanySheet} close=${close} preset=${sheet.preset} />`}
+      ${sheet.kind === "addperson" && html`<div><h2>Add someone</h2><p class="small muted" style="margin-top:0">FINN uses their career to rank them for events, and reminds you to keep in touch.</p>
+        <${AddContact} startOpen=${true} onAdded=${() => { sheet.onAdded?.(); setTimeout(close, 900); }} /></div>`}
     <//>`}
   </div>`;
 }

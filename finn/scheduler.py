@@ -16,7 +16,7 @@ import threading
 import time
 from datetime import timedelta
 
-from . import clock, db, notify, push
+from . import clock, db, notify, push, store
 
 log = logging.getLogger(__name__)
 RSS_EVERY = 300
@@ -31,10 +31,7 @@ def run_refresh(**kw) -> dict | None:
         return None
     try:
         out = push.refresh(**kw)
-        try:
-            out["push"] = notify.dispatch()
-        except Exception as e:  # notifications must never break ingestion
-            log.warning("push dispatch failed: %s", e)
+        out["push"] = for_each_user(notify.dispatch, "push dispatch")
         threading.Thread(target=_after_refresh, daemon=True).start()
         return out
     finally:
@@ -47,19 +44,28 @@ def _after_refresh() -> None:
     from . import enrich
     from .network import nudges
 
-    try:
-        b = push.brief("72h", "material")
-        _state["enrich"] = enrich.enrich_pending(b["items"])
-    except Exception as e:
-        log.warning("enrich failed: %s", e)
-    try:
-        age = db.kv_age("meta", "last_nudge_push")
-        if age is None or age > 6.5 * 86400:   # weekly, not every refresh
-            _state["nudges"] = nudges.dispatch()
-            db.kv_put("meta", "last_nudge_push", clock.now().isoformat())
-    except Exception as e:
-        log.warning("nudge push failed: %s", e)
+    # Web context is cached per filing and shared, so enriching each user's brief costs nothing extra
+    # for filings another user already triggered; the daily budget is global.
+    _state["enrich"] = for_each_user(lambda: enrich.enrich_pending(push.brief("72h", "material")["items"]), "enrich")
+    _state["nudges"] = for_each_user(nudges.dispatch, "nudge push")   # capped at two a week per user inside
     prebuild_dossiers()
+
+
+def for_each_user(fn, what: str) -> dict:
+    """Run fn in each notifiable user's own scope (the demo user plus everyone with a device registered).
+    One user's failure never blocks the others."""
+    from .context import DEFAULT_USER, reset_user, set_user
+
+    out = {}
+    for uid in dict.fromkeys([DEFAULT_USER] + store.notify_users_list()):
+        tok = set_user(uid)
+        try:
+            out[uid] = fn()
+        except Exception as e:  # notifications must never break ingestion
+            log.warning("%s failed for %s: %s", what, uid, e)
+        finally:
+            reset_user(tok)
+    return out
 
 
 def prebuild_dossiers() -> int:
@@ -86,7 +92,7 @@ def _loop() -> None:
         now = clock.now()
         try:
             if push.poll_rss():
-                notify.dispatch()   # something new may deserve a buzz
+                for_each_user(notify.dispatch, "push dispatch")   # something new may deserve a buzz
             _state["last_rss"] = now.isoformat()
         except Exception as e:
             _state["errors"] += 1

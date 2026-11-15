@@ -118,6 +118,23 @@ notified = Table("notifications_sent", md, Column("user_id", String(40), primary
 dismissed = Table("dismissed_items", md, Column("user_id", String(40), primary_key=True), Column("item_id", String(80), primary_key=True),
                   Column("at", Float))
 
+# Accounts. The password hash lives in its own table under row-level security (readable only inside that
+# user's own scope); sessions and the notification registry are server-side infrastructure keyed by an
+# opaque token hash or a bare user id, so the scheduler and the login path can read them before a user
+# is known. Neither holds personal data.
+credentials = Table("credentials", md, Column("user_id", String(40), primary_key=True), Column("password_hash", Text, nullable=False),
+                    Column("created_at", Float))
+sessions_t = Table("sessions", md, Column("token_hash", String(64), primary_key=True), Column("user_id", String(40), nullable=False),
+                   Column("created_at", Float), Column("expires_at", Float, nullable=False), Column("ua", Text),
+                   Index("ix_sessions_user", "user_id"))
+notify_users = Table("notify_users", md, Column("user_id", String(40), primary_key=True), Column("devices", Integer),
+                     Column("updated_at", Float))
+inbox = Table("inbox", md, Column("id", Integer, primary_key=True, autoincrement=True), Column("user_id", String(40), nullable=False),
+              Column("at", Float, nullable=False), Column("kind", String(20)), Column("title", Text, nullable=False), Column("body", Text),
+              Column("url", Text), Column("tag", String(120)), Column("read_at", Float), Index("ix_inbox_user", "user_id", "at"))
+user_prefs = Table("user_prefs", md, Column("user_id", String(40), primary_key=True), Column("prefs", JSON, nullable=False),
+                   Column("updated_at", Float))
+
 # Row-level security (Postgres). Each personal table admits only rows for app.user_id, which every
 # connection sets (see _scope). FORCE makes the policies bind the table owner too; only superusers
 # and BYPASSRLS roles skip them, which is why the app connects as a plain role.
@@ -135,6 +152,9 @@ RLS_POLICIES = {
     "push_subscriptions": f"user_id = {_ME}",
     "notifications_sent": f"user_id = {_ME}",
     "dismissed_items": f"user_id = {_ME}",
+    "credentials": f"user_id = {_ME}",
+    "user_prefs": f"user_id = {_ME}",
+    "inbox": f"user_id = {_ME}",
     "chat_messages": "thread_id IN (SELECT id FROM chat_threads)",        # inherits the thread's isolation
     "people": f"owner_user_id IS NULL OR owner_user_id = {_ME}",          # public profiles + your own imports
     "roles": "person_id IN (SELECT id FROM people)",                      # inherits the person's visibility
@@ -567,6 +587,134 @@ def rules_put(rules: dict, user_id: str | None = None) -> None:
 # ---------------------------------------------------------------------------
 # Personal: recommender state
 # ---------------------------------------------------------------------------
+def holding_add(ticker: str, name: str, kind: str = "portfolio", weight: float | None = None, theme: str | None = None,
+                user_id: str | None = None) -> bool:
+    """Add (or update) a company on the radar (portfolio) or the research list. Returns True if new.
+    A ticker lives in one list at a time: moving it between lists replaces the old row."""
+    uid = _uid(user_id)
+    with tx() as c:
+        existing = c.execute(select(holdings_t).where(holdings_t.c.user_id == uid, holdings_t.c.ticker == ticker)).first()
+        pos = c.execute(select(func.coalesce(func.max(holdings_t.c.position), -1)).where(
+            holdings_t.c.user_id == uid, holdings_t.c.kind == kind)).scalar() + 1
+        if existing is not None:
+            c.execute(delete(holdings_t).where(holdings_t.c.user_id == uid, holdings_t.c.ticker == ticker))
+            if existing.kind == kind:
+                pos = existing.position
+        c.execute(holdings_t.insert(), {"user_id": uid, "ticker": ticker, "kind": kind, "name": name, "theme": theme,
+                                        "weight": weight if kind == "portfolio" else None, "position": pos})
+    return existing is None
+
+
+def holding_remove(ticker: str, user_id: str | None = None) -> bool:
+    with tx() as c:
+        n = c.execute(delete(holdings_t).where(holdings_t.c.user_id == _uid(user_id), holdings_t.c.ticker == ticker)).rowcount
+    return bool(n)
+
+
+# ---- accounts ----------------------------------------------------------------
+def user_exists(user_id: str) -> bool:
+    """Checked inside that user's own scope (users is under row-level security)."""
+    from .context import reset_user, set_user
+
+    tok = set_user(user_id)
+    try:
+        with ro() as c:
+            return c.execute(select(users.c.id).where(users.c.id == user_id)).first() is not None
+    finally:
+        reset_user(tok)
+
+
+def credentials_get(user_id: str | None = None) -> str | None:
+    with ro() as c:
+        return c.execute(select(credentials.c.password_hash).where(credentials.c.user_id == _uid(user_id))).scalar()
+
+
+def credentials_put(password_hash: str, user_id: str | None = None) -> None:
+    with tx() as c:
+        _upsert(c, credentials, {"user_id": _uid(user_id), "password_hash": password_hash, "created_at": time.time()}, ["user_id"])
+
+
+def user_create(user_id: str, name: str, start_from_demo: bool = True) -> None:
+    """A new investor: the demo portfolio and network to start from, or an empty radar and network."""
+    if start_from_demo:
+        seed_user(user_id, name=name)
+        return
+    with tx() as c:
+        _upsert(c, users, {"id": user_id, "name": name, "self_person_id": None, "created_at": time.time()}, ["id"])
+
+
+def session_create(token_hash: str, user_id: str, ttl: float, ua: str | None = None) -> None:
+    now = time.time()
+    with tx() as c:
+        c.execute(sessions_t.insert(), {"token_hash": token_hash, "user_id": user_id, "created_at": now,
+                                        "expires_at": now + ttl, "ua": (ua or "")[:200]})
+
+
+def session_user(token_hash: str) -> str | None:
+    with ro() as c:
+        r = c.execute(select(sessions_t.c.user_id, sessions_t.c.expires_at).where(sessions_t.c.token_hash == token_hash)).first()
+    return r.user_id if r and r.expires_at > time.time() else None
+
+
+def session_delete(token_hash: str) -> None:
+    with tx() as c:
+        c.execute(delete(sessions_t).where(sessions_t.c.token_hash == token_hash))
+
+
+def notify_users_list() -> list[str]:
+    """Every account: the scheduler checks each for news (in-app inbox for all, a phone push for those with devices)."""
+    with ro() as c:
+        return [r.user_id for r in c.execute(select(notify_users.c.user_id))]
+
+
+def inbox_add(kind: str, title: str, body: str, url: str, tag: str | None, user_id: str | None = None) -> None:
+    with tx() as c:
+        if tag and c.execute(select(inbox.c.id).where(inbox.c.user_id == _uid(user_id), inbox.c.tag == tag)).first():
+            return   # the same notification is never listed twice
+        c.execute(inbox.insert(), {"user_id": _uid(user_id), "at": time.time(), "kind": kind, "title": title[:200],
+                                   "body": (body or "")[:400], "url": url, "tag": tag})
+
+
+def inbox_list(limit: int = 50, user_id: str | None = None) -> list[dict]:
+    with ro() as c:
+        rows = c.execute(select(inbox).where(inbox.c.user_id == _uid(user_id)).order_by(inbox.c.at.desc()).limit(limit))
+        return [{"id": r.id, "at": r.at, "kind": r.kind, "title": r.title, "body": r.body, "url": r.url, "read": r.read_at is not None}
+                for r in rows]
+
+
+def inbox_unread(user_id: str | None = None) -> int:
+    with ro() as c:
+        return c.execute(select(func.count()).select_from(inbox).where(inbox.c.user_id == _uid(user_id),
+                                                                      inbox.c.read_at.is_(None))).scalar() or 0
+
+
+def inbox_mark_read(ids: list[int] | None = None, user_id: str | None = None) -> None:
+    with tx() as c:
+        q = update(inbox).where(inbox.c.user_id == _uid(user_id), inbox.c.read_at.is_(None))
+        if ids:
+            q = q.where(inbox.c.id.in_(ids))
+        c.execute(q.values(read_at=time.time()))
+
+
+def notify_users_sync(user_id: str | None = None) -> int:
+    """Recount this user's devices into the registry (after subscribe/unsubscribe)."""
+    uid = _uid(user_id)
+    n = len(push_subs_for(uid))
+    with tx() as c:
+        _upsert(c, notify_users, {"user_id": uid, "devices": n, "updated_at": time.time()}, ["user_id"])
+    return n
+
+
+def prefs_get(user_id: str | None = None) -> dict:
+    with ro() as c:
+        return c.execute(select(user_prefs.c.prefs).where(user_prefs.c.user_id == _uid(user_id))).scalar() or {}
+
+
+def prefs_put(prefs: dict, user_id: str | None = None) -> None:
+    with tx() as c:
+        _upsert(c, user_prefs, {"user_id": _uid(user_id), "prefs": prefs, "updated_at": time.time()}, ["user_id"])
+
+
 def reco_weights_get(user_id: str | None = None) -> dict | None:
     with ro() as c:
         return c.execute(select(reco_weights.c.weights).where(reco_weights.c.user_id == _uid(user_id))).scalar()

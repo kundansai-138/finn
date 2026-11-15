@@ -18,12 +18,24 @@ Or the whole stack in containers: `docker compose --profile app up --build` (htt
 
 On a phone, use "Install FINN" (Android) or Share → Add to Home Screen (iPhone), then turn on **Alerts on this phone** in the rules sheet.
 
+### Accounts and a test user
+
+Without signing in you see the demo investor. Accounts give each investor their own radar, network, scoring and alerts (the account button, top right):
+
+```bash
+python -m scripts.create_user tester --name "Test investor"     # starts from the demo portfolio and network; --empty for a blank one
+```
+
+The password is generated and written to `.env` (git-ignored) as `FINN_TEST_USER` / `FINN_TEST_PASSWORD`; it is never printed. Sign in with it, add companies with **+** on the radar, people with **+** on People, change any score under **Account → Scoring**, and turn on alerts: they go to the devices signed in to that account.
+
+Phone alerts need HTTPS (browsers only allow push and service workers on a secure origin or `localhost`), so on a phone use the deployed app or an HTTPS tunnel to your machine. In production set `FINN_AUTH_STRICT=on`, so only a session cookie identifies a user.
+
 Without a model key everything still runs, on deterministic fallbacks. With one, FINN extracts and verifies guidance from transcripts, writes one-line summaries, argues bull and bear, and Ask FINN writes grounded answers.
 
 ## Test it
 
 ```bash
-python -m pytest -q                        # 68 tests on the real Postgres test database (no model cost)
+python -m pytest -q                        # 114 tests on the real Postgres test database (no model cost)
 FINN_TEST_LLM=on python -m pytest -m live tests/test_flows_live.py -s   # the network flows against the real web (~$0.15)
 python -m evals.run                        # quality vs labelled ground truth, each against a baseline
 python -m scripts.loadtest --users 20      # throughput and p50/p95/p99 per endpoint

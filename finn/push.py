@@ -60,7 +60,7 @@ def load_scenarios() -> list[dict]:
 
 
 def refresh(include_prices: bool = True, verbose: bool = False) -> dict[str, Any]:
-    tickers = portfolio.tickers()
+    tickers = sorted(set(portfolio.tickers()) | portfolio.tracked())   # the demo's holdings + any signed-in investor's
     stats: dict[str, Any] = {"companies": 0, "announcements": 0, "rss": 0, "errors": []}
     if include_prices:
         eod = prices.fetch_eod(tickers + [r["ticker"] for r in portfolio.research()])
@@ -90,7 +90,7 @@ def refresh(include_prices: bool = True, verbose: bool = False) -> dict[str, Any
 
 def poll_rss() -> int:
     """Cheap, frequent: NSE's exchange-wide feed, filtered to tracked tickers."""
-    tracked = set(portfolio.tickers())
+    tracked = set(portfolio.tickers()) | portfolio.tracked()
     return _store([dict(x, source="nse_rss") for x in nse_rss.fetch_items(tracked)])
 
 

@@ -94,6 +94,11 @@ def radar(window: str = "24h") -> dict[str, Any]:
     quiet = [x for x in tiles if not x["status"]]
     biggest = max(quiet, key=lambda x: abs(x["change_pct"] or 0), default=None)
     n = len(needs)
+    if not held:   # a new account: nothing on the radar yet
+        return {"as_of": b["as_of"], "window": window, "empty": True, "headline": "Your radar is empty",
+                "sub": "Add the companies you hold or follow. FINN reads their filings, prices and calls, and tells you which need a look.",
+                "tiles": [], "needs": [], "quiet": {"count": 0, "routine": 0, "biggest": None}, "done": 0, "filings": 0,
+                "eod_date": b.get("eod_date"), "last_refresh": b.get("last_refresh")}
     headline = (f"{n} of {len(held)} holdings need a look" if n > 1 else
                 f"1 of {len(held)} holdings needs a look" if n == 1 else
                 ("Everything you hold is quiet" if b["counts"]["done"] == 0 else "All handled. Nothing else needs you"))

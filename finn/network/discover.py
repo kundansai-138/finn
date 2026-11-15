@@ -361,6 +361,9 @@ def score_candidate(net: Network, q: Query, c: dict, company: str | None = None)
     org = net.orgs.get(q.org or "", {})
     peers = set(org.get("peers", [])) | {o for o, d in net.orgs.items() if q.org and q.org in d.get("peers", [])}
     cust = set(org.get("customers", [])) | set(org.get("suppliers", []))
+    from .. import scoring
+
+    ww = scoring.values("web")   # FINN's defaults, or the investor's own (Settings, Scoring)
     f = dict.fromkeys(WEB_WEIGHTS, 0.0)
     if (oid and oid == q.org) or (not q.org and same_company(company, c["org_name"])):
         f["company"] = 1.0 if c["current"] else 0.7
@@ -384,7 +387,7 @@ def score_candidate(net: Network, q: Query, c: dict, company: str | None = None)
     age = (c.get("source") or {}).get("age_years")
     fresh = 1.0 if age is None or age < 1.5 else 0.6 if age < 4 else 0.3   # an old article may describe an old job
     f["current"] = (1.0 if c["current"] else 0.4) * fresh
-    contrib = {k: WEB_WEIGHTS[k] * v for k, v in f.items()}
+    contrib = {k: ww[k] * v for k, v in f.items()}
     fit = sum(contrib.values())
     return {"org_id": oid, "function": fn, "features": {k: round(v, 3) for k, v in f.items()}, "fit": round(fit, 3),
             "contributions": [{"feature": k, "label": WEB_LABEL[k], "value": round(v, 2)}
@@ -441,6 +444,9 @@ def discover(org: str | None = None, event: str | None = None, text: str = "", t
                 hit = {"found": found, "stats": stats}
                 if "error" not in stats:
                     db.kv_put("discover", key, hit)
+    from .. import scoring
+
+    min_fit = scoring.values("web")["min_fit"]
     out, already = [], []
     for c in hit["found"]:
         s = score_candidate(net, q, c, company)
@@ -448,7 +454,7 @@ def discover(org: str | None = None, event: str | None = None, text: str = "", t
         if match and match["id"] in net.contacts:
             already.append({"name": c["name"], "id": match["id"]})
             continue
-        if s["fit"] < MIN_FIT:
+        if s["fit"] < min_fit:
             continue
         intros = intro_routes(net, s["org_id"])
         out.append({**c, **s, "intro": intros, "known_profile": match["id"] if match else None,

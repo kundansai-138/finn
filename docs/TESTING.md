@@ -4,7 +4,7 @@ Three different questions, three different tools:
 
 | Question | Tool | Command |
 |---|---|---|
-| Does the code do what it was written to do? | **Tests** (pytest, 96 tests, real Postgres; 4 more live) | `python -m pytest -q` |
+| Does the code do what it was written to do? | **Tests** (pytest, 114 tests, real Postgres; 4 more live) | `python -m pytest -q` |
 | Are the AI judgement calls *good*? | **Evals**: labelled ground truth, each scored against a simpler baseline | `python -m evals.run` |
 | Is it fast enough, under load, on a phone? | **Performance**: profiling, latency budgets, load test, mobile audit | `python -m scripts.loadtest` |
 

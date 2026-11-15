@@ -4,7 +4,7 @@ Three different questions, three different tools:
 
 | Question | Tool | Command |
 |---|---|---|
-| Does the code do what it was written to do? | **Tests** (pytest, 93 tests, real Postgres; 4 more live) | `python -m pytest -q` |
+| Does the code do what it was written to do? | **Tests** (pytest, 96 tests, real Postgres; 4 more live) | `python -m pytest -q` |
 | Are the AI judgement calls *good*? | **Evals**: labelled ground truth, each scored against a simpler baseline | `python -m evals.run` |
 | Is it fast enough, under load, on a phone? | **Performance**: profiling, latency budgets, load test, mobile audit | `python -m scripts.loadtest` |
 
@@ -70,7 +70,7 @@ Results are saved to `evals/results/<timestamp>.json`, so runs are comparable ov
 - **Trade-off.** A confident single-entity question no longer gets the model planner's judgement. For example, it won't add a web search for news around a price move (the rule plan uses price + filings, primary sources only). Comparisons, long or multi-part questions, questions without an explicit topic, and replans still go to the model, and an empty rule plan now gets one model replan. This eval has no comparison or multi-part cases, so it doesn't measure what the model planner adds there; those cases should be added next.
 - **Cost.** Per question, from the ledger rows behind `GET /api/metrics` → `llm`: $0.057 → $0.020. The calls behind it went from 12 planner, 17 answer and 2 web-search calls to 1 planner and 10 answer calls. Cache reads fell from 57% to 30% of input tokens. That's a share, not a regression: the removed planner and web calls were the cache-heavy ones, and per answer call the cache reads are unchanged (~0.7k tokens).
 
-Results: `evals/results/20261115-165018.json` (after) and `20261115-165514.json` (before, same harness, run straight after).
+Results: `evals/results/20261115-165018.json` (after) and `20261115-165514.json` (before, same harness, run straight after). Re-run on the sectioned first-person answer format ("**Bottom line:**", "#### " sections, "What I'd watch"): still 1.0 on all four, no repairs, p50 9.7 s, p90 17.0 s, $0.023 per question. The longer answers cost ~18% more output tokens, mostly at the slow end (`20261115-170547.json`).
 
 **Still to build with a model key:** two more suites.
 - a promises-ledger suite (extraction precision and recall, plus verdict accuracy against hand-labelled guidance);

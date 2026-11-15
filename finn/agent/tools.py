@@ -42,6 +42,7 @@ class Tool:
     fn: Callable[..., list[Evidence]]
     ttl: float
     needs_model: bool = False
+    version: int = 1              # bump when the evidence a tool returns changes shape: old cache entries stop matching
 
 
 def _ticker(t: str | None) -> str:
@@ -78,6 +79,47 @@ def company_overview(ticker: str, **_) -> list[Evidence]:
     return ev
 
 
+def _num(v: Any) -> float | None:
+    return float(v) if isinstance(v, (int, float)) else None
+
+
+def _leverage(t: str, c: dict, n: int) -> Evidence | None:
+    """Debt ratios computed from the reported balance sheet (and TTM P&L), with the inputs shown.
+
+    An answer about "debt level" naturally reaches for debt-to-equity, debt/EBITDA and interest cover.
+    Computed here, they're citable evidence the grounding check can trace; derived by the model, they
+    weren't, and the answer failed verification."""
+    bs = c.get("balance_sheet") or {}
+    rows, periods = bs.get("rows") or {}, (bs.get("periods") or [])[-n:]
+    eq, res, debt = (rows.get(k) for k in ("Equity Capital", "Reserves", "Borrowings"))
+    if not (eq and res and debt and periods):
+        return None
+    eq, res, debt = ([_num(v) for v in x[-n:]] for x in (eq, res, debt))
+    nw = [e + r if e is not None and r is not None else None for e, r in zip(eq, res)]
+    de = [d / w if d is not None and w else None for d, w in zip(debt, nw)]
+    parts = ["Net worth (equity capital + reserves, ₹ cr): " + ", ".join(f"{p} {_fmt(v)}" for p, v in zip(periods, nw)),
+             "Debt-to-equity (borrowings ÷ net worth): " + ", ".join(f"{p} {v:.2f}x" for p, v in zip(periods, de) if v is not None)]
+    if len(debt) >= 2 and debt[-1] is not None and debt[-2]:
+        ch = debt[-1] - debt[-2]
+        parts.append(f"Borrowings {periods[-2]} → {periods[-1]}: ₹{_fmt(debt[-2])} cr → ₹{_fmt(debt[-1])} cr "
+                     f"({'+' if ch >= 0 else '−'}₹{_fmt(abs(ch))} cr, {'+' if ch >= 0 else '−'}{abs(ch) / debt[-2] * 100:.1f}%)")
+    peak = max(((v, p) for v, p in zip(debt, periods) if v is not None), default=None)
+    if peak is None:  # no numeric borrowings: nothing to compute
+        return None
+    parts.append(f"Peak borrowings in the window: ₹{_fmt(peak[0])} cr ({peak[1]})")
+    an = c.get("annual") or {}
+    arows, aper = an.get("rows") or {}, an.get("periods") or []
+    if aper and aper[-1] == "TTM" and debt[-1] is not None:
+        op = _num((arows.get("Operating Profit") or [None])[-1])
+        it = _num((arows.get("Interest") or [None])[-1])
+        if op and op > 0:
+            parts.append(f"Borrowings ÷ TTM operating profit (₹{_fmt(debt[-1])} cr ÷ ₹{_fmt(op)} cr): {debt[-1] / op:.2f}x")
+        if op and it:
+            parts.append(f"Interest cover, TTM operating profit ÷ interest (₹{_fmt(op)} cr ÷ ₹{_fmt(it)} cr): {op / it:.1f}x")
+    return {"title": f"{c['name']}: leverage (computed from reported figures)", "source": "computed",
+            "cite": f"{t} balance sheet and TTM P&L, computed", "url": c.get("source_url"), "text": "\n".join(parts) + "."}
+
+
 def financials(ticker: str, statement: str | None = None, **_) -> list[Evidence]:
     t = _ticker(ticker)
     c = companies.get(t)
@@ -90,8 +132,13 @@ def financials(ticker: str, statement: str | None = None, **_) -> list[Evidence]
     periods = tab["periods"][-n:]
     lines = [f"{label}: " + ", ".join(f"{p} {_fmt(v)}" for p, v in zip(periods, vals[-n:]))
              for label, vals in tab["rows"].items() if not label.lower().startswith("yoy")]
-    return [{"title": f"{c['name']}: {statement or 'quarterly'} figures (₹ cr)", "source": "primary",
-             "cite": f"{t} {statement or 'quarterly'} statements", "url": c.get("source_url"), "text": "\n".join(lines)}]
+    out = [{"title": f"{c['name']}: {statement or 'quarterly'} figures (₹ cr)", "source": "primary",
+            "cite": f"{t} {statement or 'quarterly'} statements", "url": c.get("source_url"), "text": "\n".join(lines)}]
+    if key == "balance_sheet":
+        lev = _leverage(t, c, n)
+        if lev:
+            out.append(lev)
+    return out
 
 
 def promises(ticker: str, **_) -> list[Evidence]:
@@ -245,8 +292,9 @@ def read_url(url: str, **_) -> list[Evidence]:
 TOOLS: dict[str, Tool] = {t.name: t for t in [
     Tool("company_overview", "Headline numbers, growth rates, latest quarter and red/green flags for a company. Start here for 'how is X doing'.",
          {"ticker": "NSE symbol"}, ["ticker"], company_overview, 6 * 3600),
-    Tool("financials", "Reported figures for recent periods. statement = quarterly | annual | balance_sheet | cash_flow | ratios.",
-         {"ticker": "NSE symbol", "statement": "which statement"}, ["ticker"], financials, 6 * 3600),
+    Tool("financials", "Reported figures for recent periods. statement = quarterly | annual | balance_sheet | cash_flow | ratios. "
+         "balance_sheet also returns computed leverage (debt-to-equity, debt/operating profit, interest cover).",
+         {"ticker": "NSE symbol", "statement": "which statement"}, ["ticker"], financials, 6 * 3600, version=2),
     Tool("promises", "What management guided on recent earnings calls and whether it was delivered.",
          {"ticker": "NSE symbol"}, ["ticker"], promises, 6 * 3600),
     Tool("search_transcripts", "Search the last four earnings-call transcripts (management answers paired with analyst questions). Use for 'why', outlook, commentary, guidance, segment colour.",
@@ -288,7 +336,7 @@ def run(name: str, args: dict[str, Any]) -> list[Evidence]:
     if missing:
         raise ValueError(f"{name} needs {', '.join(missing)}")
     # Keyed per user: network tools return *this* investor's contacts.
-    key = hashlib.sha1(json.dumps([current_user(), name, clean], sort_keys=True).encode()).hexdigest()
+    key = hashlib.sha1(json.dumps([current_user(), name, clean] + ([t.version] if t.version > 1 else []), sort_keys=True).encode()).hexdigest()
     hit = db.kv_get("toolcache", key, max_age=t.ttl)
     if hit is not None:
         return hit

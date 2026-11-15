@@ -27,6 +27,10 @@ from ..config import ANTHROPIC_API_KEY, LLM_ENABLED, MODEL_DEEP, MODEL_FAST
 
 log = logging.getLogger(__name__)
 
+# Response cache (sha256 of the full request -> output). On by default; evals that measure model
+# latency switch it off so a rerun isn't served from a previous run's answers.
+RESPONSE_CACHE = True
+
 # USD per 1M tokens: (input, output, cache_read)
 WEB_SEARCH_USD = 0.01
 MIN_MAX_TOKENS = 1024
@@ -98,7 +102,7 @@ def complete(
     max_tokens = max(max_tokens, MIN_MAX_TOKENS)
     model = MODEL_DEEP if tier == "deep" else MODEL_FAST
     key = _key(model, system, (cache_prefix or "") + "\n\n" + prompt, schema)
-    hit = db.kv_get("llm", key)
+    hit = db.kv_get("llm", key) if RESPONSE_CACHE else None
     if hit is not None:
         _ledger(model, purpose, key, None, cached=True)
         return hit
@@ -185,7 +189,7 @@ def call(
     if not LLM_ENABLED:
         return None, None
     key = _key(model, system, json.dumps(messages, sort_keys=True, default=str) + (cache_key or ""), schema)
-    if cache_key and not tools:
+    if cache_key and not tools and RESPONSE_CACHE:
         hit = db.kv_get("llm", key)
         if hit is not None:
             _ledger(model, purpose, key, None, cached=True)

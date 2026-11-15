@@ -46,9 +46,10 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MODEL_FAST = os.getenv("FINN_MODEL_FAST", "claude-haiku-5-5")
 MODEL_DEEP = os.getenv("FINN_MODEL_DEEP", "claude-opus-5-5")
 LLM_ENABLED = bool(ANTHROPIC_API_KEY) and os.getenv("FINN_LLM", "on") != "off"
-# Agent roles. The answer-writer gets the strongest model (1M context, adaptive reasoning); the
-# planner reuses it at low effort; web search runs on Sonnet (server-side search with dynamic
-# filtering); routing, memory and summaries run on Haiku.
+# Agent roles. The answer-writer gets the strongest model (1M context, adaptive reasoning; repairs at
+# low effort); the planner reuses it at low effort, but only for questions the rule planner can't plan
+# confidently (comparisons, multi-part, no explicit topic); web search runs on Sonnet (server-side
+# search with dynamic filtering); routing, memory and summaries run on Haiku.
 MODEL_AGENT = os.getenv("FINN_MODEL_AGENT", MODEL_DEEP)
 MODEL_WEB = os.getenv("FINN_MODEL_WEB", "claude-sonnet-5-5")
 

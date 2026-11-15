@@ -1,0 +1,195 @@
+{
+  "at": "2026-11-15 16:48:17",
+  "suites": {
+    "agent": {
+      "mode": "rules (no model key)",
+      "cases": 12,
+      "entity_accuracy": 1.0,
+      "tool_recall": 1.0,
+      "grounded_rate": 1.0,
+      "no_invention_on_unanswerable": 1.0,
+      "p50_ms": 156,
+      "p90_ms": 202,
+      "usd_per_question": 0.0,
+      "usd_total": 0,
+      "cache_read_share_of_input": 0.0,
+      "model_plans": 0,
+      "answer_passes": 12,
+      "spend": {},
+      "per_case": [
+        {
+          "q": "How is Dixon's margin holding up, and why?",
+          "ms": 186,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 59,
+            "plan": 1,
+            "execute": 30,
+            "answer": 0,
+            "verify": 10,
+            "remember": 66
+          }
+        },
+        {
+          "q": "and their working capital?",
+          "ms": 202,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 54,
+            "plan": 0,
+            "execute": 8,
+            "answer": 0,
+            "verify": 5,
+            "remember": 119
+          }
+        },
+        {
+          "q": "Who can intro me to the new CFO of Deepak Nitrite?",
+          "ms": 166,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 29,
+            "plan": 0,
+            "execute": 8,
+            "answer": 0,
+            "verify": 1,
+            "remember": 117
+          }
+        },
+        {
+          "q": "Who should I call about PI Industries' acquisition?",
+          "ms": 158,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 20,
+            "plan": 0,
+            "execute": 10,
+            "answer": 0,
+            "verify": 2,
+            "remember": 114
+          }
+        },
+        {
+          "q": "How is Titan's cash conversion?",
+          "ms": 125,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 20,
+            "plan": 1,
+            "execute": 6,
+            "answer": 0,
+            "verify": 7,
+            "remember": 78
+          }
+        },
+        {
+          "q": "What did PI Industries guide for FY27?",
+          "ms": 116,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 20,
+            "plan": 0,
+            "execute": 8,
+            "answer": 0,
+            "verify": 2,
+            "remember": 74
+          }
+        },
+        {
+          "q": "What changed across my portfolio this week?",
+          "ms": 204,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 20,
+            "plan": 0,
+            "execute": 54,
+            "answer": 0,
+            "verify": 2,
+            "remember": 116
+          }
+        },
+        {
+          "q": "Who knows semiconductors?",
+          "ms": 156,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 18,
+            "plan": 0,
+            "execute": 7,
+            "answer": 0,
+            "verify": 1,
+            "remember": 117
+          }
+        },
+        {
+          "q": "What is Laurus Labs' debt level?",
+          "ms": 124,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 20,
+            "plan": 0,
+            "execute": 7,
+            "answer": 0,
+            "verify": 12,
+            "remember": 74
+          }
+        },
+        {
+          "q": "Why did HAL's stock move today?",
+          "ms": 155,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 19,
+            "plan": 0,
+            "execute": 7,
+            "answer": 0,
+            "verify": 2,
+            "remember": 113
+          }
+        },
+        {
+          "q": "What will the Sensex do tomorrow?",
+          "ms": 151,
+          "plan_source": "declined",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 21,
+            "plan": 0,
+            "execute": 0,
+            "answer": 5,
+            "verify": 0,
+            "remember": 112
+          }
+        },
+        {
+          "q": "Tell me something interesting",
+          "ms": 124,
+          "plan_source": "declined",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 21,
+            "plan": 0,
+            "execute": 0,
+            "answer": 7,
+            "verify": 0,
+            "remember": 85
+          }
+        }
+      ],
+      "first_draft_failures": [],
+      "failures": [],
+      "_seconds": 3.9
+    }
+  },
+  "git": "52e3be1"
+}

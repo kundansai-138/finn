@@ -1,0 +1,446 @@
+{
+  "label": "baseline: agent code before the fixes (same eval harness), run straight after 20261115-165018",
+  "at": "2026-11-15 16:50:22",
+  "suites": {
+    "agent": {
+      "mode": "model",
+      "cases": 12,
+      "entity_accuracy": 1.0,
+      "tool_recall": 0.875,
+      "grounded_rate": 0.917,
+      "no_invention_on_unanswerable": 0.833,
+      "p50_ms": 22541,
+      "p90_ms": 35802,
+      "usd_per_question": 0.0569,
+      "usd_total": 0.6829,
+      "cache_read_share_of_input": 0.566,
+      "model_plans": 12,
+      "answer_passes": 17,
+      "spend": {
+        "agent_plan (claude-opus-5-5)": {
+          "calls": 12,
+          "usd": 0.0979,
+          "input_tokens": 9063,
+          "output_tokens": 2739,
+          "cache_read_tokens": 10549
+        },
+        "agent_answer (claude-opus-5-5)": {
+          "calls": 17,
+          "usd": 0.5082,
+          "input_tokens": 34483,
+          "output_tokens": 18226,
+          "cache_read_tokens": 12624
+        },
+        "memory_facts (claude-haiku-5-5)": {
+          "calls": 9,
+          "usd": 0.0003,
+          "input_tokens": 2802,
+          "output_tokens": 90,
+          "cache_read_tokens": 0
+        },
+        "rewrite_followup (claude-haiku-5-5)": {
+          "calls": 1,
+          "usd": 0.0001,
+          "input_tokens": 549,
+          "output_tokens": 48,
+          "cache_read_tokens": 0
+        },
+        "web_search (claude-sonnet-5-5)": {
+          "calls": 2,
+          "usd": 0.0764,
+          "input_tokens": 241,
+          "output_tokens": 2074,
+          "cache_read_tokens": 38216
+        }
+      },
+      "per_case": [
+        {
+          "q": "How is Dixon's margin holding up, and why?",
+          "ms": 36397,
+          "plan_source": "model",
+          "answer_passes": 2,
+          "nodes_ms": {
+            "understand": 64,
+            "plan": 9190,
+            "execute": 3534,
+            "answer": 22327,
+            "verify": 8,
+            "remember": 1253
+          }
+        },
+        {
+          "q": "and their working capital?",
+          "ms": 31791,
+          "plan_source": "model",
+          "answer_passes": 2,
+          "nodes_ms": {
+            "understand": 2005,
+            "plan": 4051,
+            "execute": 31,
+            "answer": 25566,
+            "verify": 19,
+            "remember": 104
+          }
+        },
+        {
+          "q": "Who can intro me to the new CFO of Deepak Nitrite?",
+          "ms": 19585,
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 24,
+            "plan": 4844,
+            "execute": 72,
+            "answer": 12808,
+            "verify": 1,
+            "remember": 1823
+          }
+        },
+        {
+          "q": "Who should I call about PI Industries' acquisition?",
+          "ms": 22541,
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 13,
+            "plan": 3815,
+            "execute": 32,
+            "answer": 17394,
+            "verify": 2,
+            "remember": 1272
+          }
+        },
+        {
+          "q": "How is Titan's cash conversion?",
+          "ms": 35802,
+          "plan_source": "model",
+          "answer_passes": 2,
+          "nodes_ms": {
+            "understand": 14,
+            "plan": 4199,
+            "execute": 454,
+            "answer": 29380,
+            "verify": 15,
+            "remember": 1726
+          }
+        },
+        {
+          "q": "What did PI Industries guide for FY27?",
+          "ms": 16318,
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 13,
+            "plan": 3294,
+            "execute": 10,
+            "answer": 11161,
+            "verify": 0,
+            "remember": 1823
+          }
+        },
+        {
+          "q": "What changed across my portfolio this week?",
+          "ms": 17459,
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 16,
+            "plan": 3174,
+            "execute": 138,
+            "answer": 12530,
+            "verify": 1,
+            "remember": 1586
+          }
+        },
+        {
+          "q": "Who knows semiconductors?",
+          "ms": 10454,
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 16,
+            "plan": 2970,
+            "execute": 31,
+            "answer": 7306,
+            "verify": 1,
+            "remember": 113
+          }
+        },
+        {
+          "q": "What is Laurus Labs' debt level?",
+          "ms": 22517,
+          "plan_source": "model",
+          "answer_passes": 2,
+          "nodes_ms": {
+            "understand": 14,
+            "plan": 5385,
+            "execute": 11,
+            "answer": 15299,
+            "verify": 7,
+            "remember": 1783
+          }
+        },
+        {
+          "q": "Why did HAL's stock move today?",
+          "ms": 27352,
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 15,
+            "plan": 4041,
+            "execute": 11795,
+            "answer": 10157,
+            "verify": 2,
+            "remember": 1326
+          }
+        },
+        {
+          "q": "What will the Sensex do tomorrow?",
+          "ms": 28039,
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 28,
+            "plan": 4110,
+            "execute": 15406,
+            "answer": 6757,
+            "verify": 0,
+            "remember": 1721
+          }
+        },
+        {
+          "q": "Tell me something interesting",
+          "ms": 21933,
+          "plan_source": "model",
+          "answer_passes": 2,
+          "nodes_ms": {
+            "understand": 14,
+            "plan": 3128,
+            "execute": 8,
+            "answer": 18646,
+            "verify": 2,
+            "remember": 121
+          }
+        }
+      ],
+      "first_draft_failures": [
+        {
+          "q": "How is Dixon's margin holding up, and why?",
+          "unsupported": [
+            "6%"
+          ],
+          "uncited": [],
+          "unknown_citations": []
+        },
+        {
+          "q": "and their working capital?",
+          "unsupported": [
+            "₹800 cr",
+            "₹800 cr"
+          ],
+          "uncited": [],
+          "unknown_citations": []
+        },
+        {
+          "q": "How is Titan's cash conversion?",
+          "unsupported": [
+            "220"
+          ],
+          "uncited": [
+            "| 2021 | 4,139 | 4,000 | 256 | 187 | 18 | 176 | 36 |",
+            "| 2022 | -724 | -940 | 2 | 230 | 22 | 215 | 68 |",
+            "| 2023 | 1,370 | 950 | 52 | 199 | 15 | 191 | 51 |",
+            "| 2024 | 1,695 | 1,024 | 54 | 176 | 13 | 171 | 42 |",
+            "| 2025 | -541 | -1,011 | 10 | 217 | 15 | 208 | 35 |"
+          ],
+          "unknown_citations": []
+        },
+        {
+          "q": "What is Laurus Labs' debt level?",
+          "unsupported": [
+            "0.43x",
+            "₹6,061 cr",
+            "₹6,061 cr",
+            "₹6,061",
+            "0.43x",
+            "0.62x"
+          ],
+          "uncited": [],
+          "unknown_citations": []
+        },
+        {
+          "q": "Tell me something interesting",
+          "unsupported": [
+            "₹17.75",
+            "1.8%"
+          ],
+          "uncited": [],
+          "unknown_citations": []
+        }
+      ],
+      "failures": [
+        {
+          "q": "How is Dixon's margin holding up, and why?",
+          "entity_ok": true,
+          "tool_recall": 0.5,
+          "grounded": true,
+          "no_invention": true,
+          "ms": 36397,
+          "tools": [
+            "financials",
+            "search_transcripts",
+            "promises"
+          ],
+          "plan_source": "model",
+          "answer_passes": 2,
+          "nodes_ms": {
+            "understand": 64,
+            "plan": 9190,
+            "execute": 3534,
+            "answer": 22327,
+            "verify": 8,
+            "remember": 1253
+          },
+          "first_draft": {
+            "unsupported": [
+              "6%"
+            ],
+            "uncited": [],
+            "unknown_citations": []
+          }
+        },
+        {
+          "q": "Who can intro me to the new CFO of Deepak Nitrite?",
+          "entity_ok": true,
+          "tool_recall": 0.0,
+          "grounded": true,
+          "no_invention": true,
+          "ms": 19585,
+          "tools": [
+            "filings",
+            "who_can_help",
+            "web_search"
+          ],
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 24,
+            "plan": 4844,
+            "execute": 72,
+            "answer": 12808,
+            "verify": 1,
+            "remember": 1823
+          }
+        },
+        {
+          "q": "How is Titan's cash conversion?",
+          "entity_ok": true,
+          "tool_recall": 1.0,
+          "grounded": false,
+          "no_invention": true,
+          "ms": 35802,
+          "tools": [
+            "financials",
+            "financials",
+            "search_transcripts"
+          ],
+          "plan_source": "model",
+          "answer_passes": 2,
+          "nodes_ms": {
+            "understand": 14,
+            "plan": 4199,
+            "execute": 454,
+            "answer": 29380,
+            "verify": 15,
+            "remember": 1726
+          },
+          "verification": {
+            "unsupported": [
+              "170"
+            ],
+            "uncited": [],
+            "unknown_citations": []
+          },
+          "answer": "Titan's cash conversion is lumpy, but FY26 was strong: operating cash flow was ₹5,590 cr, free cash flow ₹4,713 cr, and 88% of operating profit converted to cash [E1]. The swings come from gold inventory, which stood at 222 days in FY26, while payables covered only 15 days [E2].\n\n| FY (Mar) | CFO (₹ cr) | FCF (₹ cr) | CFO/Op. profit (%) | Inventory days | Days payable | Cash conversion cycle (days) | Working capital days | Source |\n|---|---|---|---|---|---|---|---|---|\n| 2021 | 4,139 | 4,000 | 256 | 187 | 18 | 176 | 36 | [E1, E2] |\n| 2022 | -724 | -940 | 2 | 230 | 22 | 215 | 68 | [E1, E2] |\n| ",
+          "first_draft": {
+            "unsupported": [
+              "220"
+            ],
+            "uncited": [
+              "| 2021 | 4,139 | 4,000 | 256 | 187 | 18 | 176 | 36 |",
+              "| 2022 | -724 | -940 | 2 | 230 | 22 | 215 | 68 |",
+              "| 2023 | 1,370 | 950 | 52 | 199 | 15 | 191 | 51 |",
+              "| 2024 | 1,695 | 1,024 | 54 | 176 | 13 | 171 | 42 |",
+              "| 2025 | -541 | -1,011 | 10 | 217 | 15 | 208 | 35 |"
+            ],
+            "unknown_citations": []
+          }
+        },
+        {
+          "q": "What will the Sensex do tomorrow?",
+          "entity_ok": true,
+          "tool_recall": 1.0,
+          "grounded": true,
+          "no_invention": false,
+          "ms": 28039,
+          "tools": [
+            "web_search"
+          ],
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 28,
+            "plan": 4110,
+            "execute": 15406,
+            "answer": 6757,
+            "verify": 0,
+            "remember": 1721
+          },
+          "verification": {
+            "unsupported": [],
+            "uncited": [],
+            "unknown_citations": []
+          },
+          "answer": "Nobody can reliably say, and the evidence here can't support a forecast for tomorrow's Sensex. What's available is two-day-old broker and media commentary, with no NSE, BSE or SEBI sources [E1].\n\n- **Latest close found:** per web reports, the Sensex closed at 81,911.01, up 31.61 points (+0.04%), but the source doesn't clearly date this close [E4].\n- **Most recent outlook:** per TradingView News, the market was expected to open negative on Friday, 13 November, as GIFT Nifty signalled a muted start for the Sensex and Nifty 50 [E1, E2]. That was a call for an open that has already passed, not for"
+        },
+        {
+          "q": "Tell me something interesting",
+          "entity_ok": true,
+          "tool_recall": 1.0,
+          "grounded": true,
+          "no_invention": false,
+          "ms": 21933,
+          "tools": [
+            "filings"
+          ],
+          "plan_source": "model",
+          "answer_passes": 2,
+          "nodes_ms": {
+            "understand": 14,
+            "plan": 3128,
+            "execute": 8,
+            "answer": 18646,
+            "verify": 2,
+            "remember": 121
+          },
+          "verification": {
+            "unsupported": [],
+            "uncited": [],
+            "unknown_citations": []
+          },
+          "answer": "Most interesting: Bajaj Finance's promoter, Bajaj Finserv, is taking warrants at ₹1,010 a share, above the ₹992.25 floor price for the QIP that opened a day later [E6, E7]. The promoter is paying more than the QIP floor, which reads as promoter confidence, but the final QIP price isn't in the evidence yet [E6, E8].\n\n- **Promoter tranche:** The board approved 5.74 crore warrants to Bajaj Finserv at ₹1,010 each, totalling ₹5,799.99 cr [E8]. Allotment was approved on 2026-11-10 [E7].\n- **QIP:** The QIP opened on Nov 11, 2026, with a floor price of ₹992.25 per share [E6].\n- **What's missing:** The",
+          "first_draft": {
+            "unsupported": [
+              "₹17.75",
+              "1.8%"
+            ],
+            "uncited": [],
+            "unknown_citations": []
+          }
+        }
+      ],
+      "_seconds": 292.4
+    }
+  },
+  "git": null
+}

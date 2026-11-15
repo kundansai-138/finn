@@ -4,6 +4,13 @@
                    ▲               │                      │
                    └── replan ◄────┘ (nothing found)      └─► repair ─► verify (once)
 
+Unanswerable questions (a market forecast; nothing to look up) are recognised in `understand` and
+take the same path with an empty plan: no tool runs, no model is called, and the answer node writes a
+fixed decline that points at questions FINN can ground. Nothing gathered means nothing to invent from.
+
+Planning is rules-first: when the rule planner is confident (one resolved entity, an explicit intent,
+no comparison, a short question) its plan is used as is, and the model plans only the rest.
+
 Why plan-and-execute instead of a free ReAct loop:
   - one planning call, then tools run in parallel, then one answer call: fewer model round-trips,
     and a growing transcript isn't re-sent on every tool call
@@ -37,6 +44,8 @@ from . import memory, tools, verify
 from .runtime import END, StateGraph
 
 log = logging.getLogger(__name__)
+# Background work that shouldn't sit on the answer's critical path (learning investor facts).
+_BG = ThreadPoolExecutor(max_workers=4, thread_name_prefix="finn-bg")
 
 EVENTS = {
     "M&A": r"acqui|merger|takeover|deal|joint venture|jv|stake",
@@ -56,6 +65,33 @@ INTENTS = {
     "web": r"\bweb\b|internet|\bnews\b|google|search online|online|what's happening|outside",
 }
 
+# The unanswerable route. A forecast of where a price or index goes next can't be grounded in any
+# source FINN has: filings, results, calls and price history say what happened and what management
+# said, not what the market will do. Kept narrow: "what will Dixon's revenue be" is a guidance
+# question (answerable), "will Dixon's stock recover" is a price forecast (declined).
+_MKT = r"(?:sensex|nifty|bank\s?nifty|the market|markets|index|indices|stocks?|shares|share price|price)"
+_SOON = r"(?:tomorrow|next (?:week|session|month)|this week|by (?:monday|tuesday|wednesday|thursday|friday|month[- ]end|year[- ]end))"
+_MOVE = r"(?:go(?:es|ing)? (?:up|down)|rise|fall|rally|crash|recover|bounce|hit|cross|reach|close|open|end|trade|do|be)"
+FORECAST = re.compile("|".join([
+    rf"\b{_MKT}\b.*\b{_SOON}\b", rf"\b{_SOON}\b.*\b{_MKT}\b",
+    rf"\b(?:what|where|how high|how low|how far)\b.*\bwill\b.*\b{_MKT}\b",
+    rf"\b(?:will|is|are)\b.*\b{_MKT}\b.*\b{_MOVE}\b(?!\s+(?:today|yesterday))",
+    rf"\b(?:predict|forecast)\w*\b.*\b{_MKT}\b", rf"\b{_MKT}\b.*\b(?:predict|forecast)\w*\b",
+]), re.I)
+PORTFOLIO = re.compile(r"\b(?:portfolio|holdings?|positions?|my book|watchlist)\b", re.I)
+# Questions the rule planner shouldn't plan alone: comparisons and multi-part asks.
+COMPARE = re.compile(r"\b(?:vs\.?|versus|compare[sd]?|comparison|peers?|than|relative to|against|rank|ranking)\b", re.I)
+RULE_PLAN_MAX_WORDS = 18
+
+
+def unanswerable(question: str, *, entity: bool, matched_intents: bool) -> str | None:
+    """'forecast' | 'open_ended' | None. Deterministic, so a decline costs nothing and can't drift."""
+    if FORECAST.search(question):
+        return "forecast"
+    if not entity and not matched_intents and not PORTFOLIO.search(question):
+        return "open_ended"  # nothing to look up: no company, person, theme, topic or portfolio
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Node: understand (entity + intent resolution, follow-up handling)
@@ -74,6 +110,10 @@ REWRITE_SCHEMA = {
 def understand(s: dict, emit) -> dict:
     q = s["question"]
     t = s["thread"]
+    # The planner and the answer see the facts as they stood when the question arrived; learning from
+    # this question (a Haiku call) runs alongside the turn instead of after it, and lands for the next one.
+    facts = memory.facts_block()
+    s["_learning"] = _BG.submit(contextvars.copy_context().run, memory.learn_from, q)
     net = netgraph.get()
     focus = dict(t.get("focus") or {})
     pinned = t.get("pinned") or {}
@@ -102,16 +142,19 @@ def understand(s: dict, emit) -> dict:
     ticker = ticker or (focus.get("ticker") if followup else None) or pinned.get("ticker")
     person = person or (focus.get("person") if followup else None)
     intents = {k for k, rx in INTENTS.items() if re.search(rx, standalone, re.I)}
+    matched = bool(intents)
     event = next((ev for ev, rx in EVENTS.items() if re.search(rx, standalone, re.I)), None)
     if not intents:
         intents = {"commentary"} if ticker else {"people"} if (theme or person) else set()
+    decline = unanswerable(standalone, entity=bool(ticker or person or theme), matched_intents=matched)
     focus.update({k: v for k, v in {"ticker": ticker, "person": person, "theme": theme}.items() if v})
     bits = [f"company {ticker}" if ticker else None, f"person {net.people[person]['name']}" if person else None,
             f"theme {theme}" if theme else None]
     s["_detail"] = ("Focus: " + ", ".join(b for b in bits if b) if any(bits) else "No specific entity") + \
-                   (f" · intents: {', '.join(sorted(intents))}" if intents else "") + (" · follow-up resolved" if followup and ticker else "")
+                   (f" · intents: {', '.join(sorted(intents))}" if intents else "") + (" · follow-up resolved" if followup and ticker else "") + \
+                   (f" · unanswerable ({decline.replace('_', ' ')})" if decline else "")
     return {"standalone": standalone, "focus": focus, "intents": intents, "ticker": ticker, "person": person,
-            "theme": theme, "event": event}
+            "theme": theme, "event": event, "matched_intents": matched, "decline": decline, "facts": facts}
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +186,7 @@ Rules:
 - Use who_can_help / route_to_person whenever the question is about people, or when a contact could add colour.
 - Tickers are NSE symbols (e.g. DIXON, PIIND). Use the focus company for follow-ups.
 - Don't call a tool whose answer is already in the conversation summary.
+- If the question asks where a price or index will go, or names nothing the tools can look up, return no steps.
 - Set unused args to null."""
 
 
@@ -194,12 +238,28 @@ def _rule_plan(s: dict) -> list[dict]:
     return out[:5]
 
 
+def _rules_confident(s: dict, steps: list[dict]) -> bool:
+    """Use the rule plan without asking the model when the question is plainly one entity + one ask.
+    The model planner is kept for what rules plan badly: comparisons, multi-part or long questions,
+    questions with no explicit topic, and replans."""
+    q = s["standalone"]
+    return (bool(steps) and bool(s.get("matched_intents")) and bool(s.get("ticker") or s.get("person") or s.get("theme"))
+            and not COMPARE.search(q) and len(q.split()) <= RULE_PLAN_MAX_WORDS and not s.get("replan_note"))
+
+
 def plan(s: dict, emit) -> dict:
     t = s["thread"]
     steps, style, source = None, "brief", "rules"
-    if LLM_ENABLED:
+    if s.get("decline"):
+        emit({"type": "plan", "steps": [], "source": "declined"})
+        s["_detail"] = f"no tools: {'a price forecast' if s['decline'] == 'forecast' else 'nothing specific to look up'}"
+        return {"plan": [], "style": "brief", "plan_source": "declined"}
+    rule_steps = _rule_plan(s)
+    if _rules_confident(s, rule_steps):
+        steps = rule_steps
+    elif LLM_ENABLED:
         hist = "\n".join(f"{m['role']}: {memory._strip_cites(m['content'])[:300]}" for m in t["messages"][-4:])
-        prompt = (f"Tools:\n{tools.catalog()}\n\nInvestor's standing preferences:\n{memory.facts_block()}\n\n"
+        prompt = (f"Tools:\n{tools.catalog()}\n\nInvestor's standing preferences:\n{s.get('facts') or memory.facts_block()}\n\n"
                   f"Conversation summary: {t.get('summary') or '(new conversation)'}\nRecent turns:\n{hist or '(none)'}\n\n"
                   f"Focus: {json.dumps(s.get('focus'))}\nPinned context: {json.dumps(t.get('pinned') or {})}\n"
                   + (f"Note: {s['replan_note']}\n" if s.get("replan_note") else "")
@@ -211,7 +271,7 @@ def plan(s: dict, emit) -> dict:
             steps = [st for st in res["steps"] if st["tool"] in tools.TOOLS and st["tool"] in {x.name for x in tools.available()}][:5]
             style, source = res.get("answer_style", "brief"), "model"
     if not steps:
-        steps, source = _rule_plan(s), "rules"
+        steps, source = rule_steps, "rules"
     for i, st in enumerate(steps, 1):
         st["id"] = f"s{i}"
         st["args"] = {k: v for k, v in (st.get("args") or {}).items() if v not in (None, "", "null")}
@@ -251,7 +311,9 @@ def execute(s: dict, emit) -> dict:
 
 
 def after_execute(s: dict) -> str:
-    if not s.get("evidence") and s.get("replans", 0) < 1 and s.get("plan_source") == "model":
+    # Nothing found: one replan by the model (a rules-first plan that came back empty gets the model's try too).
+    if (not s.get("evidence") and s.get("replans", 0) < 1 and LLM_ENABLED
+            and (s.get("plan_source") == "model" or (s.get("plan_source") == "rules" and s.get("plan")))):
         s["replans"] = s.get("replans", 0) + 1
         s["replan_note"] = "The previous plan returned no evidence. Try different tools or broader queries."
         return "plan"
@@ -367,12 +429,35 @@ def pseudonymizer(evidence: list[dict]):
     return hide, show
 
 
+def _decline(s: dict) -> dict:
+    """The unanswerable route's answer: say plainly what FINN won't do, then narrow to what it can ground."""
+    from .. import portfolio
+
+    t = s.get("ticker")
+    top = next(iter(sorted(portfolio.holdings(), key=lambda h: -(h.get("weight") or 0))), {}).get("ticker")
+    if s.get("decline") == "forecast":
+        text = ("I couldn't find anything in FINN's sources that can ground a forecast, so I won't make one. Filings, results, "
+                "earnings calls and price history show what has happened and what management has said, not where a price "
+                "or index goes next.\n\nWhat I can do instead: explain a move that has happened, show what's changed in "
+                "the filings, or check management's guidance against delivery.")
+        fu = ([f"Why did {t}'s stock move today?", f"What did {t}'s management guide for this year?"] if t else
+              ["What changed across my portfolio this week?"] + ([f"Why did {top}'s stock move today?"] if top else []))
+    else:
+        text = ("I couldn't find a specific company, person or theme in that to research. FINN answers from exchange "
+                "filings, results, earnings calls, prices and your network, so it needs something to look up: a company, "
+                "a theme, a person, or your portfolio.")
+        fu = ["What changed across my portfolio this week?"] + ([f"How is {top}'s margin holding up?"] if top else []) + ["Who knows semiconductors?"]
+    return {"answer": text, "confidence": "high", "follow_ups": fu[:3]}
+
+
 def answer(s: dict, emit) -> dict:
     ev = s.get("evidence") or []
     out, mode = None, "extractive"
-    if LLM_ENABLED and ev:
+    if s.get("plan_source") == "declined":
+        out, mode = _decline(s), "declined"
+    elif LLM_ENABLED and ev:
         t = s["thread"]
-        system = ANSWER_SYSTEM + f"\n\nInvestor's standing preferences (tailor emphasis to these):\n{memory.facts_block()}"
+        system = ANSWER_SYSTEM + f"\n\nInvestor's standing preferences (tailor emphasis to these):\n{s.get('facts') or memory.facts_block()}"
         if t.get("summary"):
             system += f"\n\nEarlier in this conversation: {t['summary']}"
         repair = ""
@@ -386,7 +471,8 @@ def answer(s: dict, emit) -> dict:
         # Privacy: the investor's contacts are named only on our side. The model sees "Contact-2".
         hide, show = pseudonymizer(ev)
         system, msgs = hide(system), [{**m, "content": hide(m["content"])} for m in msgs]
-        res, _ = llm.call("agent_answer", model=MODEL_AGENT, effort="medium", max_tokens=3000, schema=ANSWER_SCHEMA,
+        # A repair is a constrained edit (drop or cite the flagged figures), not fresh analysis: low effort.
+        res, _ = llm.call("agent_answer", model=MODEL_AGENT, effort="low" if repair else "medium", max_tokens=3000, schema=ANSWER_SCHEMA,
                           system=system, messages=msgs, cache_key=hashlib.sha1(msgs[-1]["content"].encode()).hexdigest())
         if res:
             res = {**res, "answer": show(res["answer"]), "follow_ups": [show(f) for f in res.get("follow_ups", [])]}
@@ -394,7 +480,7 @@ def answer(s: dict, emit) -> dict:
     if out is None:
         out = _extractive(s)
     emit({"type": "answer", "text": out["answer"], "confidence": out["confidence"], "follow_ups": out.get("follow_ups", [])[:3], "mode": mode})
-    s["_detail"] = "written by model" if mode == "model" else "extractive (model offline)"
+    s["_detail"] = {"model": "written by model", "declined": "declined: out of scope"}.get(mode, "extractive (model offline)")
     return {"answer": out, "answer_mode": mode}
 
 
@@ -430,7 +516,17 @@ def remember(s: dict, emit) -> dict:
         "mode": s.get("answer_mode"), "confidence": s["answer"].get("confidence"), "follow_ups": s["answer"].get("follow_ups", []),
         "trace": s.get("trace", [])}})
     t["title"] = t.get("title") or s["question"][:60]
-    learned = memory.learn_from(s["question"])
+    fut = s.pop("_learning", None)
+    learned: list[str] = []
+    try:
+        if fut is None:
+            learned = memory.learn_from(s["question"])
+        elif fut.done():
+            learned = fut.result()
+        # else: a quick turn (a decline) finished first. Don't hold the answer for it; learn_from saves
+        # what it finds on its own, the investor just isn't told in this turn.
+    except Exception as e:  # learning is a side benefit; never fail the turn over it
+        log.warning("learning from the question failed: %s", e)
     memory.compact(t)
     memory.save(t)
     if learned:

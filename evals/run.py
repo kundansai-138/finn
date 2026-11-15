@@ -14,7 +14,8 @@ and every suite is scored against a simpler baseline, so an improvement has to b
   retrieval  transcript search: does a passage that answers the question land in the top 5?
              baseline: BM25 alone (no char n-grams, no Q&A boost, no fusion)
   agent      routing and planning: right entity, right tools, grounded answer, no invention
-             (with a model key it also runs the model planner and a faithfulness judge)
+             (with a model key: the real planner and answer model, cold (response cache off),
+             with latency per node, answer passes, and spend per question from the cost ledger)
 
 Results go to evals/results/<timestamp>.json so runs can be compared over time.
 """
@@ -156,31 +157,78 @@ def eval_agent() -> dict:
     store.seed_user("eval")
     cases = _jsonl("agent_cases.jsonl")
     rows, threads = [], {}
-    for c in cases:
-        events: list = []
-        tid = threads.get(c.get("thread"))
-        t0 = time.time()
-        st = core.run(c["q"], tid, None, events.append)
-        ms = (time.time() - t0) * 1000
-        if c.get("thread"):
-            threads[c["thread"]] = st["thread"]["id"]
-        tools = [s["tool"] for s in (st.get("plan") or [])]
-        exp = set(c.get("tools", []))
-        ok_entity = (c.get("ticker") is None or st.get("ticker") == c["ticker"]) and (c.get("person") is None or st.get("person") == c["person"])
-        answer = st["answer"]["answer"]
-        unanswerable_ok = (not c.get("unanswerable")) or ("couldn't find" in answer.lower() and not st.get("evidence"))
-        row = {"q": c["q"], "entity_ok": ok_entity, "tool_recall": (len(exp & set(tools)) / len(exp)) if exp else 1.0,
-               "grounded": st["verification"]["ok"], "no_invention": unanswerable_ok, "ms": round(ms), "tools": tools}
-        if c.get("statement"):
-            row["tool_recall"] = min(row["tool_recall"], float(any(s["args"].get("statement") == c["statement"] for s in st.get("plan") or [])))
-        rows.append(row)
+    # Measure the model, not the response cache: a rerun would otherwise replay the last run's answers.
+    llm.RESPONSE_CACHE, saved_cache = False, llm.RESPONSE_CACHE
+    # Spend: the ledger rows this process writes (the rows GET /api/metrics -> llm sums). Captured here
+    # rather than diffed from the ledger, which other processes sharing the database also write to.
+    calls: list[dict] = []
+    ledger_add = store.ledger_add
+
+    def tap(row: dict) -> None:
+        calls.append(dict(row))
+        ledger_add(row)
+
+    store.ledger_add = tap
+    try:
+        for c in cases:
+            events: list = []
+            tid = threads.get(c.get("thread"))
+            t0 = time.time()
+            st = core.run(c["q"], tid, None, events.append)
+            ms = (time.time() - t0) * 1000
+            if c.get("thread"):
+                threads[c["thread"]] = st["thread"]["id"]
+            tools = [s["tool"] for s in (st.get("plan") or [])]
+            exp = set(c.get("tools", []))
+            ok_entity = (c.get("ticker") is None or st.get("ticker") == c["ticker"]) and (c.get("person") is None or st.get("person") == c["person"])
+            answer = st["answer"]["answer"]
+            unanswerable_ok = (not c.get("unanswerable")) or ("couldn't find" in answer.lower() and not st.get("evidence"))
+            nodes: dict[str, int] = {}
+            for t in st.get("trace") or []:
+                nodes[t["node"]] = nodes.get(t["node"], 0) + (t.get("ms") or 0)
+            v = st["verification"]
+            row = {"q": c["q"], "entity_ok": ok_entity, "tool_recall": (len(exp & set(tools)) / len(exp)) if exp else 1.0,
+                   "grounded": v["ok"], "no_invention": unanswerable_ok, "ms": round(ms), "tools": tools,
+                   "plan_source": st.get("plan_source"), "answer_passes": 1 + st.get("repairs", 0), "nodes_ms": nodes}
+            if c.get("statement"):
+                row["tool_recall"] = min(row["tool_recall"], float(any(s["args"].get("statement") == c["statement"] for s in st.get("plan") or [])))
+            if not (v["ok"] and unanswerable_ok):
+                row["verification"] = {k: v[k] for k in ("unsupported", "uncited", "unknown_citations")}
+                row["answer"] = answer[:600]
+            drafts = [e for e in events if e.get("type") == "verify"]
+            if drafts and not drafts[0]["ok"]:  # what the repair pass had to fix (each repair is a second answer call)
+                row["first_draft"] = {k: drafts[0][k] for k in ("unsupported", "uncited", "unknown_citations")}
+            rows.append(row)
+    finally:
+        llm.RESPONSE_CACHE = saved_cache
+        store.ledger_add = ledger_add
     n = len(rows)
+    spend: dict[str, dict] = {}
+    for r in calls:
+        g = spend.setdefault(f"{r['purpose']} ({r['model']})", {"calls": 0, "usd": 0.0, "input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0})
+        g["calls"] += 1
+        g["usd"] += r.get("cost_usd") or 0
+        for k in ("input_tokens", "output_tokens", "cache_read_tokens"):
+            g[k] += r.get(k) or 0
+    for g in spend.values():
+        g["usd"] = round(g["usd"], 4)
+    total = sum(x["usd"] for x in spend.values())
+    read = sum(x["cache_read_tokens"] for x in spend.values())
+    fresh = sum(x["input_tokens"] for x in spend.values())
+    ms_sorted = sorted(r["ms"] for r in rows)
     out = {"mode": "model" if llm.enabled() else "rules (no model key)", "cases": n,
            "entity_accuracy": round(sum(r["entity_ok"] for r in rows) / n, 3),
            "tool_recall": round(sum(r["tool_recall"] for r in rows) / n, 3),
            "grounded_rate": round(sum(r["grounded"] for r in rows) / n, 3),
            "no_invention_on_unanswerable": round(sum(r["no_invention"] for r in rows) / n, 3),
-           "p50_ms": sorted(r["ms"] for r in rows)[n // 2],
+           "p50_ms": ms_sorted[n // 2], "p90_ms": ms_sorted[min(n - 1, int(n * 0.9))],
+           "usd_per_question": round(total / n, 4), "usd_total": round(total, 4),
+           "cache_read_share_of_input": round(read / max(1, read + fresh), 3),
+           "model_plans": sum(r["plan_source"] == "model" for r in rows),
+           "answer_passes": sum(r["answer_passes"] for r in rows),
+           "spend": spend,
+           "per_case": [{k: r[k] for k in ("q", "ms", "plan_source", "answer_passes", "nodes_ms")} for r in rows],
+           "first_draft_failures": [{"q": r["q"], **r["first_draft"]} for r in rows if r.get("first_draft")],
            "failures": [r for r in rows if not (r["entity_ok"] and r["tool_recall"] == 1 and r["grounded"] and r["no_invention"])]}
     return out
 
@@ -231,6 +279,10 @@ SUITES = {"filings": eval_filings, "reco": eval_reco, "modes": eval_modes, "retr
 
 def main(argv: list[str]) -> None:
     os.environ.setdefault("FINN_SCHEDULER", "off")
+    # Results contain ₹ and other non-ASCII text; a Windows console or redirected pipe defaults to cp1252.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     from finn import store
 
     store.init()
@@ -253,7 +305,7 @@ def main(argv: list[str]) -> None:
                         print(f"  {'':22s} {kk}: {vv}")
             elif isinstance(v, list):
                 for item in v:
-                    print(f"  ! {item}")
+                    print(f"  {'!' if k == 'failures' else '-'} {item}")
             else:
                 print(f"  {k:22s} {v}")
     out = HERE / "results" / f"{time.strftime('%Y%m%d-%H%M%S')}.json"

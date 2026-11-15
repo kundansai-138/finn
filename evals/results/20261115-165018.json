@@ -1,0 +1,225 @@
+{
+  "label": "after: unanswerable route, rules-first planning, verifier + computed leverage; paired with 20261115-165514",
+  "at": "2026-11-15 16:48:32",
+  "suites": {
+    "agent": {
+      "mode": "model",
+      "cases": 12,
+      "entity_accuracy": 1.0,
+      "tool_recall": 1.0,
+      "grounded_rate": 1.0,
+      "no_invention_on_unanswerable": 1.0,
+      "p50_ms": 9735,
+      "p90_ms": 13837,
+      "usd_per_question": 0.0196,
+      "usd_total": 0.2352,
+      "cache_read_share_of_input": 0.295,
+      "model_plans": 1,
+      "answer_passes": 12,
+      "spend": {
+        "memory_facts (claude-haiku-5-5)": {
+          "calls": 8,
+          "usd": 0.0003,
+          "input_tokens": 2491,
+          "output_tokens": 80,
+          "cache_read_tokens": 0
+        },
+        "agent_answer (claude-opus-5-5)": {
+          "calls": 10,
+          "usd": 0.2294,
+          "input_tokens": 15395,
+          "output_tokens": 8164,
+          "cache_read_tokens": 7050
+        },
+        "rewrite_followup (claude-haiku-5-5)": {
+          "calls": 1,
+          "usd": 0.0001,
+          "input_tokens": 553,
+          "output_tokens": 51,
+          "cache_read_tokens": 0
+        },
+        "agent_plan (claude-opus-5-5)": {
+          "calls": 1,
+          "usd": 0.0054,
+          "input_tokens": 767,
+          "output_tokens": 108,
+          "cache_read_tokens": 991
+        }
+      },
+      "per_case": [
+        {
+          "q": "How is Dixon's margin holding up, and why?",
+          "ms": 17454,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 65,
+            "plan": 0,
+            "execute": 54,
+            "answer": 17192,
+            "verify": 3,
+            "remember": 120
+          }
+        },
+        {
+          "q": "and their working capital?",
+          "ms": 11326,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 2383,
+            "plan": 0,
+            "execute": 7,
+            "answer": 8809,
+            "verify": 3,
+            "remember": 108
+          }
+        },
+        {
+          "q": "Who can intro me to the new CFO of Deepak Nitrite?",
+          "ms": 7783,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 35,
+            "plan": 0,
+            "execute": 7,
+            "answer": 7610,
+            "verify": 1,
+            "remember": 116
+          }
+        },
+        {
+          "q": "Who should I call about PI Industries' acquisition?",
+          "ms": 11363,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 21,
+            "plan": 0,
+            "execute": 7,
+            "answer": 11204,
+            "verify": 2,
+            "remember": 118
+          }
+        },
+        {
+          "q": "How is Titan's cash conversion?",
+          "ms": 9735,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 22,
+            "plan": 0,
+            "execute": 8,
+            "answer": 9567,
+            "verify": 5,
+            "remember": 120
+          }
+        },
+        {
+          "q": "What did PI Industries guide for FY27?",
+          "ms": 10308,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 17,
+            "plan": 0,
+            "execute": 7,
+            "answer": 10154,
+            "verify": 0,
+            "remember": 115
+          }
+        },
+        {
+          "q": "What changed across my portfolio this week?",
+          "ms": 13837,
+          "plan_source": "model",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 20,
+            "plan": 3376,
+            "execute": 7,
+            "answer": 10310,
+            "verify": 1,
+            "remember": 111
+          }
+        },
+        {
+          "q": "Who knows semiconductors?",
+          "ms": 7000,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 17,
+            "plan": 0,
+            "execute": 5,
+            "answer": 6844,
+            "verify": 1,
+            "remember": 120
+          }
+        },
+        {
+          "q": "What is Laurus Labs' debt level?",
+          "ms": 6269,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 19,
+            "plan": 0,
+            "execute": 6,
+            "answer": 6107,
+            "verify": 6,
+            "remember": 118
+          }
+        },
+        {
+          "q": "Why did HAL's stock move today?",
+          "ms": 7851,
+          "plan_source": "rules",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 28,
+            "plan": 0,
+            "execute": 9,
+            "answer": 7687,
+            "verify": 3,
+            "remember": 114
+          }
+        },
+        {
+          "q": "What will the Sensex do tomorrow?",
+          "ms": 146,
+          "plan_source": "declined",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 19,
+            "plan": 0,
+            "execute": 0,
+            "answer": 5,
+            "verify": 0,
+            "remember": 112
+          }
+        },
+        {
+          "q": "Tell me something interesting",
+          "ms": 112,
+          "plan_source": "declined",
+          "answer_passes": 1,
+          "nodes_ms": {
+            "understand": 19,
+            "plan": 0,
+            "execute": 0,
+            "answer": 6,
+            "verify": 0,
+            "remember": 77
+          }
+        }
+      ],
+      "first_draft_failures": [],
+      "failures": [],
+      "_seconds": 105.3
+    }
+  },
+  "git": "52e3be1"
+}

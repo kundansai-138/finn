@@ -4,7 +4,7 @@ Three different questions, three different tools:
 
 | Question | Tool | Command |
 |---|---|---|
-| Does the code do what it was written to do? | **Tests** (pytest, 68 tests, real Postgres; 4 more live) | `python -m pytest -q` |
+| Does the code do what it was written to do? | **Tests** (pytest, 93 tests, real Postgres; 4 more live) | `python -m pytest -q` |
 | Are the AI judgement calls *good*? | **Evals**: labelled ground truth, each scored against a simpler baseline | `python -m evals.run` |
 | Is it fast enough, under load, on a phone? | **Performance**: profiling, latency budgets, load test, mobile audit | `python -m scripts.loadtest` |
 
@@ -20,7 +20,7 @@ Setup: `docker compose up -d db`. Tests use the separate `finn_test` database, r
 | Fiscal calendar | call month → quarter discussed; FY27 = Apr 2026–Mar 2027; guidance verdicts, including "behind" for an incomplete year | the promises ledger depends on it |
 | Parsers | screener and NSE RSS against synthetic fixtures (no third-party pages in the repo) | catches parser breakage offline |
 | Filing triage | body escalation ("General Updates" → acquisition), paperwork never escalates | missed news is the costliest error |
-| Agent | invented tools dropped; an ungrounded draft is repaired; tool plans | hallucination control |
+| Agent | invented tools dropped; an ungrounded draft is repaired; tool plans; price forecasts and open-ended asks are declined with no tool or model call; a confident rule plan skips the planner; dates aren't figures, and a derived figure passes only when its inputs are shown beside it and the arithmetic checks; leverage computed with its inputs | hallucination control |
 | Push | payload encrypted (aes128gcm), VAPID-signed, sent once, expired devices forgotten, a dead device doesn't block the rest | uses a local mock push service |
 | Latency budgets | p95 limits on brief, recommender, portfolio, health | performance regressions fail CI |
 | Network flows (24 scenarios, `tests/test_flows.py`) | cause ranking (named subject beats generic insider; sector themes don't override the event); web leads verified against the page they cite (invented URL and conflated name dropped); fact-checks need every number on the page; trusted sources first; budget and cache; push engine gates weak matches; nudges rank overdue × value × reason, logging a call clears them, weekly push cap, the contact's name never reaches the model | the web is where hallucination enters; these pin the checks in code |
@@ -38,6 +38,7 @@ Results are saved to `evals/results/<timestamp>.json`, so runs are comparable ov
 | Push vs pull engine (`modes`) | same 28 queries; plus derived "call today" labels (grade −1 for a dormant contact) | push: 97% of names shown on an alert are good calls (39 shown); NDCG −0.01 | pull engine on alerts: 89% (47 shown) |
 | Transcript retrieval | 12 questions, keyword-defined relevance (silver labels) | recall@5 0.917, MRR **0.764** | BM25 only: 0.917, 0.681 |
 | Agent routing (no key) | 12 cases incl. follow-ups and unanswerables | entity 1.0, tool recall 1.0, grounded 1.0, no invention 1.0 | — |
+| Agent with a model key (cold: response cache off) | same 12 cases, real planner and answer model | entity 1.0, tool recall 1.0, grounded **1.0**, no invention **1.0**; p50 **9.7 s**, p90 13.8 s; **$0.020 per question**; 0 repair passes | same harness on the code before these fixes, run straight after: 1.0 / 0.875 / 0.917 / 0.833; p50 22.5 s, p90 35.8 s; $0.057 per question; 5 repair passes |
 
 **What the evals found** (that's what they're for):
 - Title-only triage misses a third of the critical filings, because companies bury news under "General Updates". Reading the body fixes it.
@@ -46,9 +47,32 @@ Results are saved to `evals/results/<timestamp>.json`, so runs are comparable ov
 - The `modes` suite rejected two push designs before the third: an additive warmth weight lost on both label sets, and a product of probabilities let reachability swamp saturated relevance scores. Multiplying in odds space won where it matters, on the two names an alert shows.
 - Hybrid retrieval doesn't find more passages than BM25 here, but it ranks the right one higher (MRR +0.08).
 
-**First run of the agent suite with a model key (15 Nov 2026):** entity 1.0, tool recall 0.875, grounded 0.917, no invention on unanswerables **0.833**, p50 24 s. Two cases answered what should have been declined ("What will the Sensex do tomorrow?", "Tell me something interesting"), and one Laurus debt answer wasn't fully grounded. Logged as open work, not tuned away here.
+**The agent suite with a model key.** The first run (15 Nov 2026) scored entity 1.0, tool recall 0.875, grounded 0.917, no invention on unanswerables **0.833**, p50 24 s. The eval now runs cold (response cache off, so a rerun can't replay the last run's answers) and records time per graph node, answer passes, the first draft's grounding failures, and spend from the run's own ledger rows. That showed where the problems were:
+- **Invention on unanswerables.** "What will the Sensex do tomorrow?" was answered from web market outlooks, and "Tell me something interesting" from the week's filings. The planner reached for *some* tool, and the answer model wrote from whatever came back. Fix: a deterministic unanswerable route in `understand`. Price or index forecasts, and questions naming no company, person, theme, topic or the portfolio, get an empty plan: no tool runs, no model is called, and a fixed decline offers questions FINN can ground. With nothing gathered, there's nothing to invent from. The forecast pattern is kept narrow and pinned by tests both ways: "what will Dixon's revenue be" is a guidance question; "will Dixon's stock recover" is declined.
+- **Ungrounded drafts.** 5–7 of 12 first drafts failed the grounding check, each costing a second Opus call. There were three causes:
+  - the model derived ratios itself (Laurus debt-to-equity);
+  - the verifier read dates ("Nov 10–15", "12 Nov") as figures;
+  - it couldn't check sound arithmetic shown in the answer ("PBT ex other income ₹460 cr (₹532 cr − ₹72 cr)").
 
-**With a model key, two things change.** The agent suite runs the model planner, and two more suites become possible:
+  The fixes:
+  - the balance-sheet tool now returns leverage as *computed* evidence, with its inputs shown;
+  - dates aren't figures;
+  - a figure that is the sum, difference, ratio or % change of two traced figures *in the same sentence* is checked as arithmetic.
+
+  A derived figure without its inputs, or with wrong arithmetic, still fails. First drafts that need repair: 5 → 0 in the paired run.
+- **Latency.** The p50 went from 22.5 s to 9.7 s (27.0 → 9.7 s in an earlier pair). Where the time went:
+  - Planning (3–10 s of Opus) is skipped when the rule planner is confident: one resolved entity, an explicit intent, no comparison, at most 18 words. On these cases the rule planner already had tool recall 1.0 against the model's 0.875.
+  - Repairs (8–15 s each) mostly disappeared, and a repair that does happen runs at low effort.
+  - Learning investor facts (a 1–2 s Haiku call) now runs alongside the turn instead of after it.
+  - Declines take 0.1 s.
+
+  What's left is one Opus answer call at medium effort, 6–17 s. That's the next lever, but cutting it trades away answer depth, which no suite here scores yet.
+- **Trade-off.** A confident single-entity question no longer gets the model planner's judgement. For example, it won't add a web search for news around a price move (the rule plan uses price + filings, primary sources only). Comparisons, long or multi-part questions, questions without an explicit topic, and replans still go to the model, and an empty rule plan now gets one model replan. This eval has no comparison or multi-part cases, so it doesn't measure what the model planner adds there; those cases should be added next.
+- **Cost.** Per question, from the ledger rows behind `GET /api/metrics` → `llm`: $0.057 → $0.020. The calls behind it went from 12 planner, 17 answer and 2 web-search calls to 1 planner and 10 answer calls. Cache reads fell from 57% to 30% of input tokens. That's a share, not a regression: the removed planner and web calls were the cache-heavy ones, and per answer call the cache reads are unchanged (~0.7k tokens).
+
+Results: `evals/results/20261115-165018.json` (after) and `20261115-165514.json` (before, same harness, run straight after).
+
+**Still to build with a model key:** two more suites.
 - a promises-ledger suite (extraction precision and recall, plus verdict accuracy against hand-labelled guidance);
 - a faithfulness judge (a model checks each answer's claims against its evidence), calibrated against a small human-labelled set before it's trusted.
 

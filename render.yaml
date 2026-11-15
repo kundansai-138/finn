@@ -11,6 +11,8 @@ services:
     envVars:
       - key: DATABASE_URL        # Neon connection string (pooled endpoint), sslmode=require
         sync: false
+      - key: GEMINI_API_KEY      # Google AI Studio key; set this or ANTHROPIC_API_KEY
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: FINN_VAPID_PRIVATE_KEY   # from: python -m scripts.vapid_keys

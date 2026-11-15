@@ -42,16 +42,25 @@ TTL_PRICES = int(os.getenv("FINN_TTL_PRICES", str(6 * 3600)))
 # --- LLM routing -----------------------------------------------------------
 # Cheap model for bulk extraction / classification / one-liners; strong model
 # only where reasoning over numbers + quotes is needed. Both overridable.
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")   # tolerate pasted quotes or spaces
-MODEL_FAST = os.getenv("FINN_MODEL_FAST", "claude-haiku-5-5")
-MODEL_DEEP = os.getenv("FINN_MODEL_DEEP", "claude-opus-5-5")
-LLM_ENABLED = bool(ANTHROPIC_API_KEY) and os.getenv("FINN_LLM", "on") != "off"
+def _secret(*names: str) -> str:
+    return next((v for v in (os.getenv(n, "").strip().strip('"').strip("'") for n in names) if v), "")   # tolerate pasted quotes
+
+
+ANTHROPIC_API_KEY = _secret("ANTHROPIC_API_KEY")
+GEMINI_API_KEY = _secret("GEMINI_API_KEY", "GOOGLE_API_KEY")
+# Which model provider: "anthropic" or "gemini". Default: whichever key is set (Gemini if only it is).
+LLM_PROVIDER = os.getenv("FINN_LLM_PROVIDER", "").lower() or ("gemini" if GEMINI_API_KEY and not ANTHROPIC_API_KEY else "anthropic")
+_G = LLM_PROVIDER == "gemini"
+LLM_API_KEY = GEMINI_API_KEY if _G else ANTHROPIC_API_KEY
+MODEL_FAST = os.getenv("FINN_MODEL_FAST", "gemini-2.5-flash" if _G else "claude-haiku-5-5")
+MODEL_DEEP = os.getenv("FINN_MODEL_DEEP", "gemini-2.5-pro" if _G else "claude-opus-5-5")
+LLM_ENABLED = bool(LLM_API_KEY) and os.getenv("FINN_LLM", "on") != "off"
 # Agent roles. The answer-writer gets the strongest model (1M context, adaptive reasoning; repairs at
 # low effort); the planner reuses it at low effort, but only for questions the rule planner can't plan
 # confidently (comparisons, multi-part, no explicit topic); web search runs on Sonnet (server-side
 # search with dynamic filtering); routing, memory and summaries run on Haiku.
 MODEL_AGENT = os.getenv("FINN_MODEL_AGENT", MODEL_DEEP)
-MODEL_WEB = os.getenv("FINN_MODEL_WEB", "claude-sonnet-5-5")
+MODEL_WEB = os.getenv("FINN_MODEL_WEB", "gemini-2.5-flash" if _G else "claude-sonnet-5-5")
 
 # Demo: include simulated scenario events (clearly badged in the UI).
 INCLUDE_SCENARIOS = os.getenv("FINN_SCENARIOS", "on") != "off"

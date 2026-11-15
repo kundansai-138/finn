@@ -23,7 +23,8 @@ import time
 from typing import Any
 
 from .. import db, store
-from ..config import ANTHROPIC_API_KEY, LLM_ENABLED, MODEL_DEEP, MODEL_FAST
+from ..config import ANTHROPIC_API_KEY, LLM_API_KEY, LLM_ENABLED, LLM_PROVIDER, MODEL_DEEP, MODEL_FAST
+from . import gemini
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +39,11 @@ PRICES = {
     "claude-haiku-5-5": (0.10, 0.50, 0.01),
     "claude-sonnet-5-5": (2.00, 10.00, 0.10),
     "claude-opus-5-5": (4.00, 20.00, 0.20),
+    "gemini-2.5-flash-lite": (0.10, 0.40, 0.025),
+    "gemini-2.5-flash": (0.30, 2.50, 0.075),
+    "gemini-2.5-pro": (1.25, 10.00, 0.31),
 }
+GEMINI_SEARCH_USD = 0.035   # Google Search grounding, per grounded request beyond the free daily allowance
 
 _client = None
 
@@ -67,8 +72,9 @@ def _key_rejected(purpose: str, e: Exception) -> None:
     _auth_down_until = time.time() + AUTH_PAUSE_S
     _auth_error = str(getattr(e, "message", e))[:160]
     if first:
-        log.error("Anthropic rejected the API key (%s): %s. Model calls paused for %d min; running on fallbacks. "
-                  "Set a valid ANTHROPIC_API_KEY.", purpose, _auth_error, AUTH_PAUSE_S // 60)
+        log.error("%s rejected the API key (%s): %s. Model calls paused for %d min; running on fallbacks. "
+                  "Set a valid %s.", LLM_PROVIDER.title(), purpose, _auth_error, AUTH_PAUSE_S // 60,
+                  "GEMINI_API_KEY" if LLM_PROVIDER == "gemini" else "ANTHROPIC_API_KEY")
 
 
 def enabled() -> bool:
@@ -101,7 +107,7 @@ def _ledger(model: str, purpose: str, key: str, usage: Any | None, cached: bool)
         cost = (it * pin + cw * pin * 1.25 + cr * pcr + ot * pout) / 1e6
         # Server-side web search is billed per search on top of tokens ($10 per 1,000).
         searches = getattr(getattr(usage, "server_tool_use", None), "web_search_requests", 0) or 0
-        cost += searches * WEB_SEARCH_USD
+        cost += (GEMINI_SEARCH_USD if searches else 0) if model.startswith("gemini") else searches * WEB_SEARCH_USD
     store.ledger_add({"at": time.time(), "model": model, "purpose": purpose, "prompt_hash": key[:16], "input_tokens": it,
                       "output_tokens": ot, "cache_read_tokens": cr, "cost_usd": cost, "cached": int(cached)})
 
@@ -134,6 +140,13 @@ def complete(
     if hit is not None:
         _ledger(model, purpose, key, None, cached=True)
         return hit
+
+    if LLM_PROVIDER == "gemini":
+        resp = _gemini(purpose, model=model, system=system, max_tokens=max_tokens, effort=effort or ("high" if tier == "deep" else "low"),
+                       schema=schema, messages=[{"role": "user", "content": ((cache_prefix + "\n\n") if cache_prefix else "") + prompt}])
+        if resp is None:
+            return None
+        return _finish(resp, model, purpose, key, schema, store_it=True)
 
     content: list[dict[str, Any]] = []
     if cache_prefix:
@@ -237,6 +250,13 @@ def call(
     )
     if tools:
         kwargs["tools"] = tools
+    if LLM_PROVIDER == "gemini":
+        resp = _gemini(purpose, model=model, system=system, messages=messages, max_tokens=max_tokens, effort=effort,
+                       schema=schema, tools=tools)
+        if resp is None:
+            return None, None
+        out = _finish(resp, model, purpose, key, schema, store_it=bool(cache_key and not tools))
+        return out, resp
     import anthropic
 
     client = _get_client()
@@ -278,7 +298,44 @@ def call(
     return out, resp
 
 
+def _gemini(purpose: str, **kw) -> Any | None:
+    try:
+        return gemini.generate(LLM_API_KEY, **kw)
+    except gemini.GeminiError as e:
+        if e.auth:
+            _key_rejected(purpose, e)
+        elif e.status_code == 429:
+            log.warning("LLM rate limited (%s): %s", purpose, e.message)
+        else:
+            log.warning("LLM API error %s (%s): %s", e.status_code, purpose, e.message)
+    except Exception as e:   # network trouble: the caller falls back
+        log.warning("LLM connection error (%s): %s", purpose, e)
+    return None
+
+
+def _finish(resp: Any, model: str, purpose: str, key: str, schema: dict | None, store_it: bool) -> Any | None:
+    _ledger(model, purpose, key, resp.usage, cached=False)
+    if resp.stop_reason == "refusal":
+        log.warning("LLM refused (%s)", purpose)
+        return None
+    text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+    if resp.stop_reason == "max_tokens":
+        log.warning("LLM hit max_tokens (%s): %d chars of answer", purpose, len(text))
+    if not text:
+        return None
+    out: Any = text
+    if schema:
+        try:
+            out = json.loads(text)
+        except json.JSONDecodeError:
+            log.warning("LLM returned invalid JSON (%s), stop_reason=%s", purpose, resp.stop_reason)
+            return None
+    if store_it:
+        db.kv_put("llm", key, out)
+    return out
+
+
 def spend_summary() -> dict[str, Any]:
     items = store.ledger_summary()
-    return {"enabled": LLM_ENABLED, "fast": MODEL_FAST, "deep": MODEL_DEEP,
+    return {"enabled": LLM_ENABLED, "provider": LLM_PROVIDER, "fast": MODEL_FAST, "deep": MODEL_DEEP,
             "total_usd": round(sum((r["cost"] or 0) for r in items), 4), "by_purpose": items}

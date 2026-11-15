@@ -6,3 +6,6 @@ data/cache/
 .venv/
 data/vapid/
 data/test.sqlite3*
+
+# production setup values (secrets): see scripts/setup_production.py
+deploy/

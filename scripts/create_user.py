@@ -18,8 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _write_env(user: str, password: str) -> None:
-    env = ROOT / ".env"
+def _write_env(user: str, password: str, path: Path | None = None) -> None:
+    env = path or ROOT / ".env"
     text = env.read_text(encoding="utf-8") if env.exists() else ""
     for k, v in (("FINN_TEST_USER", user), ("FINN_TEST_PASSWORD", password)):
         line = f"{k}={v}"
@@ -33,6 +33,7 @@ def main() -> None:
     ap.add_argument("--name", default=None)
     ap.add_argument("--empty", action="store_true", help="start with an empty radar and network")
     ap.add_argument("--reset-password", action="store_true")
+    ap.add_argument("--env-file", default=None, help="where to write the credentials (default: .env)")
     a = ap.parse_args()
 
     from finn import auth, store
@@ -47,8 +48,8 @@ def main() -> None:
     else:
         auth.register(a.username, password, a.name, start_from_demo=not a.empty)
         print(f"Created {a.username} ({'empty' if a.empty else 'starting from the demo portfolio and network'}).")
-    _write_env(a.username, password)
-    print("Credentials written to .env as FINN_TEST_USER / FINN_TEST_PASSWORD (git ignores .env).")
+    _write_env(a.username, password, Path(a.env_file) if a.env_file else None)
+    print(f"Credentials written to {a.env_file or '.env'} as FINN_TEST_USER / FINN_TEST_PASSWORD (git ignores it).")
 
 
 if __name__ == "__main__":

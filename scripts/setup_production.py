@@ -84,6 +84,10 @@ def main() -> None:
     if bypass:
         raise SystemExit(f"{ROLE} can bypass row-level security on this server; refusing to continue.")
     app_url = sa_url(with_user(owner, ROLE, app_pw))
+    if cfg.get("NEON_POOLED_HOST"):   # the app connects through Neon's connection pooler; DDL above used the direct host
+        p = urlsplit(app_url)
+        creds = p.netloc.split("@", 1)[0]
+        app_url = urlunsplit((p.scheme, f"{creds}@{cfg['NEON_POOLED_HOST']}", p.path, p.query, p.fragment))
     write({"FINN_APP_DB_PASSWORD": app_pw, "DATABASE_URL": app_url})
     env = {"DATABASE_URL": app_url, "FINN_SCHEDULER": "off", "FINN_LLM": "off"}
 

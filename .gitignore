@@ -9,3 +9,7 @@ data/test.sqlite3*
 
 # production setup values (secrets): see scripts/setup_production.py
 deploy/
+.neon
+node_modules/
+.env.local
+.env.*.local

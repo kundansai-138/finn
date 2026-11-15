@@ -1,0 +1,30 @@
+{
+  "owner": "you",
+  "as_of": "2026-11-14",
+  "portfolio": [
+    {"ticker": "RELIANCE",   "name": "Reliance Industries",  "theme": "conglomerate",         "weight": 8.0},
+    {"ticker": "HDFCBANK",   "name": "HDFC Bank",            "theme": "banking",              "weight": 9.0},
+    {"ticker": "TCS",        "name": "TCS",                  "theme": "it services",          "weight": 6.0},
+    {"ticker": "ASIANPAINT", "name": "Asian Paints",         "theme": "paints & coatings",    "weight": 5.0},
+    {"ticker": "BAJFINANCE", "name": "Bajaj Finance",        "theme": "consumer lending",     "weight": 7.0},
+    {"ticker": "CHOLAFIN",   "name": "Cholamandalam Finance","theme": "rural lending",        "weight": 4.5},
+    {"ticker": "DIXON",      "name": "Dixon Technologies",   "theme": "electronics manufacturing", "weight": 5.5},
+    {"ticker": "KAYNES",     "name": "Kaynes Technology",    "theme": "electronics manufacturing", "weight": 3.0},
+    {"ticker": "PIIND",      "name": "PI Industries",        "theme": "agrochemicals",        "weight": 4.0},
+    {"ticker": "DEEPAKNTR",  "name": "Deepak Nitrite",       "theme": "specialty chemicals",  "weight": 4.0},
+    {"ticker": "POLYCAB",    "name": "Polycab India",        "theme": "cables & wires",       "weight": 5.0},
+    {"ticker": "TRENT",      "name": "Trent",                "theme": "retail",               "weight": 6.0},
+    {"ticker": "HAL",        "name": "Hindustan Aeronautics","theme": "defence",              "weight": 5.0},
+    {"ticker": "SUNPHARMA",  "name": "Sun Pharma",           "theme": "pharma",               "weight": 5.5},
+    {"ticker": "LAURUSLABS", "name": "Laurus Labs",          "theme": "pharma cdmo",          "weight": 3.5},
+    {"ticker": "ULTRACEMCO", "name": "UltraTech Cement",     "theme": "cement",               "weight": 5.0},
+    {"ticker": "ETERNAL",    "name": "Eternal (Zomato)",     "theme": "quick commerce",       "weight": 4.0},
+    {"ticker": "TATAPOWER",  "name": "Tata Power",           "theme": "power & renewables",   "weight": 4.0}
+  ],
+  "research": [
+    {"ticker": "SRF",        "name": "SRF",                  "theme": "specialty chemicals"},
+    {"ticker": "NAVINFLUOR", "name": "Navin Fluorine",       "theme": "specialty chemicals"},
+    {"ticker": "CGPOWER",    "name": "CG Power",             "theme": "semiconductors"},
+    {"ticker": "TATAELXSI",  "name": "Tata Elxsi",           "theme": "it services"}
+  ]
+}

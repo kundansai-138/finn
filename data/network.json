@@ -1,0 +1,1557 @@
+{
+  "_note": "SYNTHETIC. Every person here is fictional; employers are real companies used for realism. In production this is built from the investor's own contacts / LinkedIn data export (with consent) and public filings, enriched via a licensed people-data provider.",
+  "orgs": {
+    "reliance": {
+      "name": "Reliance Industries",
+      "ticker": "RELIANCE",
+      "themes": [
+        "conglomerate",
+        "retail",
+        "telecom"
+      ],
+      "aliases": [
+        "Reliance Industries Ltd",
+        "Reliance Retail",
+        "Reliance Jio",
+        "Jio Platforms"
+      ]
+    },
+    "hdfcbank": {
+      "name": "HDFC Bank",
+      "ticker": "HDFCBANK",
+      "themes": [
+        "banking",
+        "consumer lending"
+      ],
+      "peers": [
+        "icicibank",
+        "kotakbank"
+      ]
+    },
+    "tcs": {
+      "name": "Tata Consultancy Services",
+      "ticker": "TCS",
+      "themes": [
+        "it services"
+      ],
+      "aliases": [
+        "TCS"
+      ],
+      "peers": [
+        "infosys",
+        "wipro"
+      ]
+    },
+    "asianpaint": {
+      "name": "Asian Paints",
+      "ticker": "ASIANPAINT",
+      "themes": [
+        "paints & coatings",
+        "consumer"
+      ],
+      "peers": [
+        "berger"
+      ]
+    },
+    "bajfinance": {
+      "name": "Bajaj Finance",
+      "ticker": "BAJFINANCE",
+      "themes": [
+        "consumer lending",
+        "nbfc"
+      ],
+      "peers": [
+        "cholafin",
+        "hdfcbank"
+      ]
+    },
+    "cholafin": {
+      "name": "Cholamandalam Investment & Finance",
+      "ticker": "CHOLAFIN",
+      "themes": [
+        "rural lending",
+        "vehicle finance",
+        "nbfc"
+      ],
+      "aliases": [
+        "Chola",
+        "Cholamandalam Finance"
+      ],
+      "peers": [
+        "mmfin",
+        "bajfinance"
+      ]
+    },
+    "dixon": {
+      "name": "Dixon Technologies",
+      "ticker": "DIXON",
+      "themes": [
+        "electronics manufacturing"
+      ],
+      "peers": [
+        "kaynes",
+        "syrma",
+        "amber"
+      ],
+      "customers": [
+        "samsung",
+        "motorola"
+      ]
+    },
+    "kaynes": {
+      "name": "Kaynes Technology",
+      "ticker": "KAYNES",
+      "themes": [
+        "electronics manufacturing",
+        "semiconductors"
+      ],
+      "peers": [
+        "dixon",
+        "syrma"
+      ]
+    },
+    "piind": {
+      "name": "PI Industries",
+      "ticker": "PIIND",
+      "themes": [
+        "agrochemicals",
+        "specialty chemicals"
+      ],
+      "peers": [
+        "upl",
+        "srf"
+      ]
+    },
+    "deepakntr": {
+      "name": "Deepak Nitrite",
+      "ticker": "DEEPAKNTR",
+      "themes": [
+        "specialty chemicals"
+      ],
+      "peers": [
+        "aarti",
+        "navinfluor",
+        "srf"
+      ]
+    },
+    "polycab": {
+      "name": "Polycab India",
+      "ticker": "POLYCAB",
+      "themes": [
+        "cables & wires",
+        "electricals"
+      ],
+      "peers": [
+        "kei",
+        "havells"
+      ]
+    },
+    "trent": {
+      "name": "Trent",
+      "ticker": "TRENT",
+      "themes": [
+        "retail"
+      ],
+      "aliases": [
+        "Westside",
+        "Zudio"
+      ],
+      "peers": [
+        "dmart"
+      ]
+    },
+    "hal": {
+      "name": "Hindustan Aeronautics",
+      "ticker": "HAL",
+      "themes": [
+        "defence",
+        "aerospace"
+      ],
+      "peers": [
+        "bel"
+      ]
+    },
+    "sunpharma": {
+      "name": "Sun Pharmaceutical",
+      "ticker": "SUNPHARMA",
+      "themes": [
+        "pharma"
+      ],
+      "peers": [
+        "drreddy",
+        "cipla"
+      ]
+    },
+    "lauruslabs": {
+      "name": "Laurus Labs",
+      "ticker": "LAURUSLABS",
+      "themes": [
+        "pharma cdmo",
+        "pharma"
+      ],
+      "peers": [
+        "divis",
+        "syngene"
+      ]
+    },
+    "ultracemco": {
+      "name": "UltraTech Cement",
+      "ticker": "ULTRACEMCO",
+      "themes": [
+        "cement"
+      ],
+      "peers": [
+        "ambuja"
+      ]
+    },
+    "eternal": {
+      "name": "Eternal (Zomato)",
+      "ticker": "ETERNAL",
+      "themes": [
+        "quick commerce",
+        "consumer internet"
+      ],
+      "aliases": [
+        "Zomato",
+        "Blinkit"
+      ],
+      "peers": [
+        "swiggy"
+      ]
+    },
+    "tatapower": {
+      "name": "Tata Power",
+      "ticker": "TATAPOWER",
+      "themes": [
+        "power & renewables"
+      ],
+      "peers": [
+        "renew",
+        "ntpc"
+      ]
+    },
+    "srf": {
+      "name": "SRF",
+      "ticker": "SRF",
+      "themes": [
+        "specialty chemicals",
+        "fluorochemicals"
+      ],
+      "peers": [
+        "navinfluor"
+      ]
+    },
+    "navinfluor": {
+      "name": "Navin Fluorine International",
+      "ticker": "NAVINFLUOR",
+      "themes": [
+        "specialty chemicals",
+        "fluorochemicals"
+      ],
+      "peers": [
+        "srf"
+      ]
+    },
+    "cgpower": {
+      "name": "CG Power & Industrial Solutions",
+      "ticker": "CGPOWER",
+      "themes": [
+        "semiconductors",
+        "electricals"
+      ],
+      "aliases": [
+        "CG Semi"
+      ],
+      "peers": [
+        "kaynes"
+      ]
+    },
+    "tataelxsi": {
+      "name": "Tata Elxsi",
+      "ticker": "TATAELXSI",
+      "themes": [
+        "it services",
+        "design engineering"
+      ],
+      "peers": [
+        "kpit",
+        "tcs"
+      ]
+    },
+    "aarti": {
+      "name": "Aarti Industries",
+      "ticker": "AARTIIND",
+      "themes": [
+        "specialty chemicals"
+      ]
+    },
+    "upl": {
+      "name": "UPL",
+      "ticker": "UPL",
+      "themes": [
+        "agrochemicals"
+      ]
+    },
+    "divis": {
+      "name": "Divi's Laboratories",
+      "ticker": "DIVISLAB",
+      "themes": [
+        "pharma cdmo",
+        "pharma"
+      ]
+    },
+    "syngene": {
+      "name": "Syngene International",
+      "ticker": "SYNGENE",
+      "themes": [
+        "pharma cdmo"
+      ]
+    },
+    "syrma": {
+      "name": "Syrma SGS",
+      "ticker": "SYRMA",
+      "themes": [
+        "electronics manufacturing"
+      ]
+    },
+    "tata-elec": {
+      "name": "Tata Electronics",
+      "themes": [
+        "electronics manufacturing",
+        "semiconductors"
+      ]
+    },
+    "micron": {
+      "name": "Micron India",
+      "themes": [
+        "semiconductors"
+      ]
+    },
+    "ti": {
+      "name": "Texas Instruments India",
+      "themes": [
+        "semiconductors"
+      ]
+    },
+    "berger": {
+      "name": "Berger Paints",
+      "ticker": "BERGEPAINT",
+      "themes": [
+        "paints & coatings"
+      ]
+    },
+    "kei": {
+      "name": "KEI Industries",
+      "ticker": "KEI",
+      "themes": [
+        "cables & wires"
+      ]
+    },
+    "dmart": {
+      "name": "Avenue Supermarts",
+      "ticker": "DMART",
+      "themes": [
+        "retail"
+      ]
+    },
+    "icicibank": {
+      "name": "ICICI Bank",
+      "ticker": "ICICIBANK",
+      "themes": [
+        "banking"
+      ]
+    },
+    "infosys": {
+      "name": "Infosys",
+      "ticker": "INFY",
+      "themes": [
+        "it services"
+      ]
+    },
+    "renew": {
+      "name": "ReNew Energy",
+      "themes": [
+        "power & renewables"
+      ]
+    },
+    "swiggy": {
+      "name": "Swiggy",
+      "ticker": "SWIGGY",
+      "themes": [
+        "quick commerce",
+        "consumer internet"
+      ]
+    },
+    "goldman": {
+      "name": "Goldman Sachs",
+      "themes": [
+        "investment banking"
+      ]
+    },
+    "mckinsey": {
+      "name": "McKinsey & Company",
+      "themes": [
+        "consulting"
+      ]
+    },
+    "bain": {
+      "name": "Bain & Company",
+      "themes": [
+        "consulting"
+      ]
+    },
+    "deloitte": {
+      "name": "Deloitte",
+      "themes": [
+        "audit"
+      ]
+    },
+    "kotak-ie": {
+      "name": "Kotak Institutional Equities",
+      "themes": [
+        "sell-side research"
+      ]
+    },
+    "meridian": {
+      "name": "Meridian Capital (your fund)",
+      "themes": [
+        "investing"
+      ]
+    },
+    "westbridge": {
+      "name": "Westbridge Family Office",
+      "themes": [
+        "investing"
+      ]
+    },
+    "gramin": {
+      "name": "Gramin Credit (startup)",
+      "themes": [
+        "rural lending",
+        "fintech"
+      ]
+    },
+    "kovai": {
+      "name": "Kovai Biologics (private CDMO)",
+      "themes": [
+        "pharma cdmo"
+      ]
+    },
+    "aerostrat": {
+      "name": "Aerostrat Systems (startup)",
+      "themes": [
+        "defence",
+        "aerospace"
+      ]
+    },
+    "shelfwise": {
+      "name": "Shelfwise (startup)",
+      "themes": [
+        "quick commerce"
+      ]
+    },
+    "iitb": {
+      "name": "IIT Bombay",
+      "kind": "school"
+    },
+    "iima": {
+      "name": "IIM Ahmedabad",
+      "kind": "school"
+    },
+    "iimb": {
+      "name": "IIM Bangalore",
+      "kind": "school"
+    },
+    "nitt": {
+      "name": "NIT Trichy",
+      "kind": "school"
+    },
+    "nmims": {
+      "name": "NMIMS Mumbai",
+      "kind": "school"
+    }
+  },
+  "you": {
+    "id": "you",
+    "name": "You",
+    "headline": "Portfolio Manager, Meridian Capital",
+    "roles": [
+      {
+        "org": "asianpaint",
+        "title": "Management Trainee, Supply Chain",
+        "function": "supply-chain",
+        "from": "2008-07",
+        "to": "2010-05"
+      },
+      {
+        "org": "mckinsey",
+        "title": "Associate",
+        "function": "consulting",
+        "from": "2012-06",
+        "to": "2015-03"
+      },
+      {
+        "org": "kotak-ie",
+        "title": "Analyst, Chemicals & Industrials",
+        "function": "research",
+        "from": "2015-04",
+        "to": "2019-06"
+      },
+      {
+        "org": "meridian",
+        "title": "Portfolio Manager",
+        "function": "investing",
+        "from": "2019-07",
+        "to": null
+      }
+    ],
+    "education": [
+      {
+        "org": "iitb",
+        "degree": "B.Tech, Chemical Engineering",
+        "from": "2004",
+        "to": "2008"
+      },
+      {
+        "org": "iima",
+        "degree": "PGP (MBA)",
+        "from": "2010",
+        "to": "2012"
+      }
+    ]
+  },
+  "people": [
+    {
+      "id": "ananya",
+      "name": "Ananya Rao",
+      "headline": "Head of Investor Relations, Aarti Industries",
+      "location": "Mumbai",
+      "roles": [
+        {
+          "org": "kotak-ie",
+          "title": "Analyst, Chemicals",
+          "function": "research",
+          "from": "2014-06",
+          "to": "2019-03"
+        },
+        {
+          "org": "aarti",
+          "title": "Head of Investor Relations",
+          "function": "ir",
+          "from": "2019-04",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "nitt",
+          "degree": "B.Tech, Chemical",
+          "from": "2008",
+          "to": "2012"
+        },
+        {
+          "org": "iimb",
+          "degree": "PGP",
+          "from": "2012",
+          "to": "2014"
+        }
+      ],
+      "tie": {
+        "type": "ex-colleague",
+        "context": "Sat next to you on the chemicals desk at Kotak",
+        "since": "2015",
+        "last_contact": "2026-08-21",
+        "interactions_12m": 6
+      },
+      "tags": [
+        "specialty chemicals"
+      ]
+    },
+    {
+      "id": "meera",
+      "name": "Meera Krishnan",
+      "headline": "Independent advisor, agrochemicals operations",
+      "location": "Vadodara",
+      "roles": [
+        {
+          "org": "upl",
+          "title": "Head of Manufacturing, Gujarat",
+          "function": "manufacturing",
+          "from": "2008-07",
+          "to": "2018-06"
+        },
+        {
+          "org": "piind",
+          "title": "VP Operations",
+          "function": "manufacturing",
+          "from": "2018-07",
+          "to": "2023-09"
+        }
+      ],
+      "education": [
+        {
+          "org": "iitb",
+          "degree": "B.Tech, Chemical Engineering",
+          "from": "2004",
+          "to": "2008"
+        }
+      ],
+      "tie": {
+        "type": "classmate",
+        "context": "IIT Bombay Chem Eng batchmate and hostel wing-mate",
+        "since": "2004",
+        "last_contact": "2026-03-02",
+        "interactions_12m": 2
+      },
+      "tags": [
+        "agrochemicals",
+        "specialty chemicals"
+      ]
+    },
+    {
+      "id": "rahul",
+      "name": "Rahul Bhatia",
+      "headline": "Head of Strategy, Tata Elxsi",
+      "location": "Bengaluru",
+      "roles": [
+        {
+          "org": "tcs",
+          "title": "Systems Engineer → Project Lead",
+          "function": "engineering",
+          "from": "2006-07",
+          "to": "2010-05"
+        },
+        {
+          "org": "bain",
+          "title": "Consultant",
+          "function": "consulting",
+          "from": "2012-06",
+          "to": "2016-05"
+        },
+        {
+          "org": "infosys",
+          "title": "Director, Corporate Strategy",
+          "function": "strategy",
+          "from": "2016-06",
+          "to": "2020-03"
+        },
+        {
+          "org": "tataelxsi",
+          "title": "Head of Strategy",
+          "function": "strategy",
+          "from": "2020-04",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iima",
+          "degree": "PGP (MBA)",
+          "from": "2010",
+          "to": "2012"
+        }
+      ],
+      "tie": {
+        "type": "classmate",
+        "context": "IIMA section-mate; co-ran the finance club",
+        "since": "2010",
+        "last_contact": "2025-12-10",
+        "interactions_12m": 0
+      },
+      "tags": [
+        "it services"
+      ]
+    },
+    {
+      "id": "priya",
+      "name": "Priya Venkataraman",
+      "headline": "COO, Kovai Biologics",
+      "location": "Hyderabad",
+      "roles": [
+        {
+          "org": "divis",
+          "title": "Plant Head, Vizag API unit",
+          "function": "manufacturing",
+          "from": "2010-01",
+          "to": "2020-02"
+        },
+        {
+          "org": "lauruslabs",
+          "title": "VP Manufacturing (CDMO)",
+          "function": "manufacturing",
+          "from": "2020-03",
+          "to": "2024-05"
+        },
+        {
+          "org": "kovai",
+          "title": "Chief Operating Officer",
+          "function": "operations",
+          "from": "2024-06",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "nitt",
+          "degree": "B.Tech, Chemical",
+          "from": "1998",
+          "to": "2002"
+        }
+      ],
+      "tie": {
+        "type": "met",
+        "context": "Met at CPHI India 2024; follow-up plant visit in Hyderabad",
+        "since": "2024",
+        "last_contact": "2026-06-18",
+        "interactions_12m": 3
+      },
+      "tags": [
+        "pharma cdmo",
+        "pharma"
+      ]
+    },
+    {
+      "id": "arjun",
+      "name": "Arjun Nair",
+      "headline": "VP Operations, Tata Electronics (OSAT, Assam)",
+      "location": "Guwahati",
+      "roles": [
+        {
+          "org": "mckinsey",
+          "title": "Engagement Manager",
+          "function": "consulting",
+          "from": "2011-06",
+          "to": "2017-04"
+        },
+        {
+          "org": "dixon",
+          "title": "Head of Strategy",
+          "function": "strategy",
+          "from": "2017-05",
+          "to": "2021-06"
+        },
+        {
+          "org": "tata-elec",
+          "title": "VP Operations, semiconductor assembly",
+          "function": "operations",
+          "from": "2021-07",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iitb",
+          "degree": "B.Tech, Electrical",
+          "from": "2003",
+          "to": "2007"
+        }
+      ],
+      "tie": {
+        "type": "ex-colleague",
+        "context": "Your first engagement manager at McKinsey",
+        "since": "2012",
+        "last_contact": "2026-10-28",
+        "interactions_12m": 7
+      },
+      "tags": [
+        "electronics manufacturing",
+        "semiconductors"
+      ]
+    },
+    {
+      "id": "kavya",
+      "name": "Kavya Menon",
+      "headline": "Founder & CEO, Gramin Credit",
+      "location": "Chennai",
+      "roles": [
+        {
+          "org": "cholafin",
+          "title": "Regional Business Head, Vehicle Finance (TN)",
+          "function": "sales",
+          "from": "2012-04",
+          "to": "2021-03"
+        },
+        {
+          "org": "gramin",
+          "title": "Founder & CEO",
+          "function": "founder",
+          "from": "2021-04",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iimb",
+          "degree": "PGP",
+          "from": "2010",
+          "to": "2012"
+        }
+      ],
+      "tie": {
+        "type": "founder",
+        "context": "Pitched you in 2025; you passed but stayed in touch",
+        "since": "2025",
+        "last_contact": "2026-09-12",
+        "interactions_12m": 4
+      },
+      "tags": [
+        "rural lending",
+        "fintech"
+      ]
+    },
+    {
+      "id": "vikram",
+      "name": "Vikram Sood",
+      "headline": "Senior VP, Retail Credit Risk, HDFC Bank",
+      "location": "Mumbai",
+      "roles": [
+        {
+          "org": "kotak-ie",
+          "title": "Analyst, BFSI",
+          "function": "research",
+          "from": "2013-06",
+          "to": "2018-05"
+        },
+        {
+          "org": "bajfinance",
+          "title": "VP, Risk",
+          "function": "risk",
+          "from": "2018-06",
+          "to": "2023-03"
+        },
+        {
+          "org": "hdfcbank",
+          "title": "Senior VP, Retail Credit Risk",
+          "function": "risk",
+          "from": "2023-04",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "nmims",
+          "degree": "MBA (Finance)",
+          "from": "2011",
+          "to": "2013"
+        }
+      ],
+      "tie": {
+        "type": "ex-colleague",
+        "context": "Covered banks at Kotak while you covered chemicals",
+        "since": "2015",
+        "last_contact": "2026-07-04",
+        "interactions_12m": 3
+      },
+      "tags": [
+        "banking",
+        "consumer lending"
+      ]
+    },
+    {
+      "id": "sneha",
+      "name": "Sneha Kulkarni",
+      "headline": "Director, OSAT Program, CG Semi",
+      "location": "Ahmedabad",
+      "roles": [
+        {
+          "org": "ti",
+          "title": "Design Engineer → Manager",
+          "function": "engineering",
+          "from": "2008-07",
+          "to": "2016-02"
+        },
+        {
+          "org": "micron",
+          "title": "Senior Manager, Assembly & Test",
+          "function": "operations",
+          "from": "2016-03",
+          "to": "2022-05"
+        },
+        {
+          "org": "cgpower",
+          "title": "Director, OSAT Program",
+          "function": "operations",
+          "from": "2022-06",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iitb",
+          "degree": "B.Tech, Electrical Engineering",
+          "from": "2004",
+          "to": "2008"
+        }
+      ],
+      "tie": {
+        "type": "classmate",
+        "context": "IIT Bombay batchmate (Electrical); same hostel",
+        "since": "2004",
+        "last_contact": "2025-05-20",
+        "interactions_12m": 0
+      },
+      "tags": [
+        "semiconductors"
+      ]
+    },
+    {
+      "id": "farhan",
+      "name": "Farhan Qureshi",
+      "headline": "Adviser, Aerostrat Systems; ex-HAL",
+      "location": "Bengaluru",
+      "roles": [
+        {
+          "org": "hal",
+          "title": "Design Engineer → Deputy GM, Aircraft Division",
+          "function": "engineering",
+          "from": "2002-08",
+          "to": "2019-10"
+        },
+        {
+          "org": "aerostrat",
+          "title": "Adviser",
+          "function": "advisory",
+          "from": "2019-11",
+          "to": null
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "expert",
+        "context": "Two expert calls on HAL's order book in 2024",
+        "since": "2024",
+        "last_contact": "2025-11-02",
+        "interactions_12m": 1
+      },
+      "tags": [
+        "defence",
+        "aerospace"
+      ]
+    },
+    {
+      "id": "neha",
+      "name": "Neha Agarwal",
+      "headline": "VP Fashion, Reliance Retail",
+      "location": "Mumbai",
+      "roles": [
+        {
+          "org": "trent",
+          "title": "Category Head, Westside",
+          "function": "merchandising",
+          "from": "2011-06",
+          "to": "2018-03"
+        },
+        {
+          "org": "dmart",
+          "title": "Head of General Merchandise",
+          "function": "merchandising",
+          "from": "2018-04",
+          "to": "2022-01"
+        },
+        {
+          "org": "reliance",
+          "title": "VP Fashion, Reliance Retail",
+          "function": "merchandising",
+          "from": "2022-02",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "nmims",
+          "degree": "MBA (Marketing)",
+          "from": "2009",
+          "to": "2011"
+        }
+      ],
+      "tie": {
+        "type": "friend",
+        "context": "Close friend from Mumbai; families know each other",
+        "since": "2009",
+        "last_contact": "2026-10-19",
+        "interactions_12m": 10
+      },
+      "tags": [
+        "retail"
+      ]
+    },
+    {
+      "id": "aditya",
+      "name": "Aditya Shah",
+      "headline": "Head of Marketing, Berger Paints",
+      "location": "Kolkata",
+      "roles": [
+        {
+          "org": "asianpaint",
+          "title": "Brand Manager",
+          "function": "marketing",
+          "from": "2012-06",
+          "to": "2017-08"
+        },
+        {
+          "org": "berger",
+          "title": "Head of Marketing",
+          "function": "marketing",
+          "from": "2017-09",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iima",
+          "degree": "PGP (MBA)",
+          "from": "2010",
+          "to": "2012"
+        }
+      ],
+      "tie": {
+        "type": "classmate",
+        "context": "IIMA batchmate",
+        "since": "2010",
+        "last_contact": "2026-02-14",
+        "interactions_12m": 1
+      },
+      "tags": [
+        "paints & coatings",
+        "consumer"
+      ]
+    },
+    {
+      "id": "rohit",
+      "name": "Rohit Jain",
+      "headline": "GM Corporate Finance, UltraTech Cement",
+      "location": "Mumbai",
+      "roles": [
+        {
+          "org": "kotak-ie",
+          "title": "Analyst, Cement & Infra",
+          "function": "research",
+          "from": "2016-01",
+          "to": "2019-04"
+        },
+        {
+          "org": "ultracemco",
+          "title": "GM, Corporate Finance",
+          "function": "finance",
+          "from": "2019-05",
+          "to": null
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "ex-colleague",
+        "context": "Junior analyst you mentored at Kotak",
+        "since": "2016",
+        "last_contact": "2026-01-08",
+        "interactions_12m": 1
+      },
+      "tags": [
+        "cement"
+      ]
+    },
+    {
+      "id": "tanvi",
+      "name": "Tanvi Desai",
+      "headline": "Founder, Shelfwise (dark-store software)",
+      "location": "Gurugram",
+      "roles": [
+        {
+          "org": "eternal",
+          "title": "Head of Supply, then Blinkit dark-store ops",
+          "function": "operations",
+          "from": "2015-08",
+          "to": "2024-02"
+        },
+        {
+          "org": "shelfwise",
+          "title": "Founder",
+          "function": "founder",
+          "from": "2024-03",
+          "to": null
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "met",
+        "context": "Intro via Amit in 2023; met twice in Gurugram",
+        "since": "2023",
+        "last_contact": "2026-04-22",
+        "interactions_12m": 2
+      },
+      "tags": [
+        "quick commerce"
+      ]
+    },
+    {
+      "id": "sanjay",
+      "name": "Sanjay Menon",
+      "headline": "CIO, Westbridge Family Office",
+      "location": "Mumbai",
+      "roles": [
+        {
+          "org": "kotak-ie",
+          "title": "Head of Research",
+          "function": "research",
+          "from": "2009-01",
+          "to": "2020-06"
+        },
+        {
+          "org": "westbridge",
+          "title": "Chief Investment Officer",
+          "function": "investing",
+          "from": "2020-07",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iima",
+          "degree": "PGP (MBA)",
+          "from": "1995",
+          "to": "1997"
+        }
+      ],
+      "tie": {
+        "type": "mentor",
+        "context": "Your boss at Kotak; still your sounding board",
+        "since": "2015",
+        "last_contact": "2026-09-30",
+        "interactions_12m": 5
+      },
+      "tags": []
+    },
+    {
+      "id": "ishaan",
+      "name": "Ishaan Gupta",
+      "headline": "VP Strategy, ReNew Energy",
+      "location": "Gurugram",
+      "roles": [
+        {
+          "org": "mckinsey",
+          "title": "Associate → Engagement Manager",
+          "function": "consulting",
+          "from": "2012-01",
+          "to": "2016-04"
+        },
+        {
+          "org": "tatapower",
+          "title": "Head of Renewables Strategy",
+          "function": "strategy",
+          "from": "2016-05",
+          "to": "2021-08"
+        },
+        {
+          "org": "renew",
+          "title": "VP Strategy",
+          "function": "strategy",
+          "from": "2021-09",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iitb",
+          "degree": "B.Tech, Mechanical",
+          "from": "2003",
+          "to": "2007"
+        }
+      ],
+      "tie": {
+        "type": "ex-colleague",
+        "context": "Same McKinsey energy practice cohort",
+        "since": "2012",
+        "last_contact": "2025-08-15",
+        "interactions_12m": 0
+      },
+      "tags": [
+        "power & renewables"
+      ]
+    },
+    {
+      "id": "lakshmi",
+      "name": "Lakshmi Narayanan",
+      "headline": "Regulatory consultant; ex-Sun Pharma",
+      "location": "Mumbai",
+      "roles": [
+        {
+          "org": "sunpharma",
+          "title": "Head, Regulatory Affairs (US)",
+          "function": "regulatory",
+          "from": "2005-03",
+          "to": "2020-12"
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "expert",
+        "context": "Expert-network call on USFDA observations, 2025",
+        "since": "2025",
+        "last_contact": "2025-10-07",
+        "interactions_12m": 0
+      },
+      "tags": [
+        "pharma"
+      ]
+    },
+    {
+      "id": "dev",
+      "name": "Dev Malhotra",
+      "headline": "Head of Exports, KEI Industries",
+      "location": "Delhi",
+      "roles": [
+        {
+          "org": "polycab",
+          "title": "Regional Sales Manager",
+          "function": "sales",
+          "from": "2010-06",
+          "to": "2016-03"
+        },
+        {
+          "org": "kei",
+          "title": "Head of Exports",
+          "function": "sales",
+          "from": "2016-04",
+          "to": null
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "friend",
+        "context": "School friend from Delhi",
+        "since": "1998",
+        "last_contact": "2026-05-01",
+        "interactions_12m": 3
+      },
+      "tags": [
+        "cables & wires"
+      ]
+    },
+    {
+      "id": "zara",
+      "name": "Zara Sheikh",
+      "headline": "Head of Strategy, Navin Fluorine",
+      "location": "Mumbai",
+      "roles": [
+        {
+          "org": "goldman",
+          "title": "Associate, Investment Banking",
+          "function": "banking",
+          "from": "2012-06",
+          "to": "2018-03"
+        },
+        {
+          "org": "srf",
+          "title": "Director, Corporate Development (M&A)",
+          "function": "strategy",
+          "from": "2018-04",
+          "to": "2023-02"
+        },
+        {
+          "org": "navinfluor",
+          "title": "Head of Strategy",
+          "function": "strategy",
+          "from": "2023-03",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iima",
+          "degree": "PGP (MBA)",
+          "from": "2010",
+          "to": "2012"
+        }
+      ],
+      "tie": {
+        "type": "classmate",
+        "context": "IIMA batchmate; you worked on a case competition together",
+        "since": "2010",
+        "last_contact": "2026-06-03",
+        "interactions_12m": 2
+      },
+      "tags": [
+        "specialty chemicals",
+        "fluorochemicals"
+      ]
+    },
+    {
+      "id": "kiran",
+      "name": "Kiran Reddy",
+      "headline": "VP Sales, Kaynes Technology",
+      "location": "Mysuru",
+      "roles": [
+        {
+          "org": "syrma",
+          "title": "Key Account Manager",
+          "function": "sales",
+          "from": "2014-02",
+          "to": "2019-05"
+        },
+        {
+          "org": "kaynes",
+          "title": "VP Sales",
+          "function": "sales",
+          "from": "2019-06",
+          "to": null
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "met",
+        "context": "Met at the Kaynes analyst day, 2025",
+        "since": "2025",
+        "last_contact": "2026-10-09",
+        "interactions_12m": 2
+      },
+      "tags": [
+        "electronics manufacturing"
+      ]
+    },
+    {
+      "id": "amit",
+      "name": "Amit Saxena",
+      "headline": "VP Finance, Swiggy",
+      "location": "Bengaluru",
+      "roles": [
+        {
+          "org": "mckinsey",
+          "title": "Associate",
+          "function": "consulting",
+          "from": "2010-08",
+          "to": "2014-05"
+        },
+        {
+          "org": "reliance",
+          "title": "Strategy, Jio",
+          "function": "strategy",
+          "from": "2014-06",
+          "to": "2020-01"
+        },
+        {
+          "org": "swiggy",
+          "title": "VP Finance",
+          "function": "finance",
+          "from": "2020-02",
+          "to": null
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "ex-colleague",
+        "context": "Overlapped two years at McKinsey",
+        "since": "2012",
+        "last_contact": "2026-03-11",
+        "interactions_12m": 1
+      },
+      "tags": [
+        "consumer internet",
+        "quick commerce"
+      ]
+    },
+    {
+      "id": "rekha",
+      "name": "Rekha Pillai",
+      "headline": "GM Procurement, Asian Paints",
+      "location": "Mumbai",
+      "roles": [
+        {
+          "org": "asianpaint",
+          "title": "Supply Chain → GM Procurement",
+          "function": "procurement",
+          "from": "2008-07",
+          "to": null
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "ex-colleague",
+        "context": "Same management-trainee batch at Asian Paints",
+        "since": "2008",
+        "last_contact": "2024-12-01",
+        "interactions_12m": 0
+      },
+      "tags": [
+        "paints & coatings"
+      ]
+    },
+    {
+      "id": "gaurav",
+      "name": "Gaurav Bansal",
+      "headline": "VP Operations (Phenolics), Deepak Nitrite",
+      "location": "Vadodara",
+      "roles": [
+        {
+          "org": "deepakntr",
+          "title": "Plant Engineer → VP Operations, Phenolics",
+          "function": "manufacturing",
+          "from": "2010-08",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iitb",
+          "degree": "B.Tech, Chemical Engineering",
+          "from": "2004",
+          "to": "2008"
+        }
+      ],
+      "tie": {
+        "type": "classmate",
+        "context": "IIT Bombay Chem Eng batchmate",
+        "since": "2004",
+        "last_contact": "2025-12-20",
+        "interactions_12m": 1
+      },
+      "tags": [
+        "specialty chemicals"
+      ]
+    },
+    {
+      "id": "maya",
+      "name": "Maya Fernandes",
+      "headline": "Head of Digital Lending, Bajaj Finance",
+      "location": "Pune",
+      "roles": [
+        {
+          "org": "icicibank",
+          "title": "Product Manager, Retail Assets",
+          "function": "product",
+          "from": "2012-06",
+          "to": "2019-04"
+        },
+        {
+          "org": "bajfinance",
+          "title": "Head of Digital Lending",
+          "function": "product",
+          "from": "2019-05",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "iima",
+          "degree": "PGP (MBA)",
+          "from": "2010",
+          "to": "2012"
+        }
+      ],
+      "tie": {
+        "type": "met",
+        "context": "Reconnected at the IIMA alumni meet, Feb 2026",
+        "since": "2026",
+        "last_contact": "2026-08-05",
+        "interactions_12m": 2
+      },
+      "tags": [
+        "consumer lending",
+        "fintech"
+      ]
+    },
+    {
+      "id": "harish",
+      "name": "Harish Iyer",
+      "headline": "Head of Investor Relations, Syngene",
+      "location": "Bengaluru",
+      "roles": [
+        {
+          "org": "kotak-ie",
+          "title": "Analyst, Pharma",
+          "function": "research",
+          "from": "2015-07",
+          "to": "2019-02"
+        },
+        {
+          "org": "lauruslabs",
+          "title": "Investor Relations",
+          "function": "ir",
+          "from": "2019-03",
+          "to": "2022-06"
+        },
+        {
+          "org": "syngene",
+          "title": "Head of Investor Relations",
+          "function": "ir",
+          "from": "2022-07",
+          "to": null
+        }
+      ],
+      "education": [],
+      "tie": {
+        "type": "ex-colleague",
+        "context": "Pharma analyst on your Kotak team",
+        "since": "2015",
+        "last_contact": "2026-01-19",
+        "interactions_12m": 1
+      },
+      "tags": [
+        "pharma cdmo"
+      ]
+    }
+  ],
+  "public_profiles": [
+    {
+      "id": "siddharth",
+      "name": "Siddharth Kapadia",
+      "headline": "CFO-designate, Deepak Nitrite",
+      "simulated": true,
+      "source": "Simulated profile; in production: the 'brief profile' in the Reg 30 appointment filing + licensed people-data provider",
+      "roles": [
+        {
+          "org": "deloitte",
+          "title": "Audit Senior",
+          "function": "audit",
+          "from": "2004-08",
+          "to": "2008-05"
+        },
+        {
+          "org": "asianpaint",
+          "title": "Manager, Corporate Finance",
+          "function": "finance",
+          "from": "2008-06",
+          "to": "2014-03"
+        },
+        {
+          "org": "upl",
+          "title": "Financial Controller, India",
+          "function": "finance",
+          "from": "2014-04",
+          "to": "2019-03"
+        },
+        {
+          "org": "aarti",
+          "title": "Deputy CFO",
+          "function": "finance",
+          "from": "2019-04",
+          "to": "2026-11"
+        },
+        {
+          "org": "deepakntr",
+          "title": "Chief Financial Officer (designate)",
+          "function": "finance",
+          "from": "2026-12",
+          "to": null
+        }
+      ],
+      "education": [
+        {
+          "org": "nmims",
+          "degree": "B.Com",
+          "from": "1999",
+          "to": "2002"
+        },
+        {
+          "org": "iimb",
+          "degree": "Executive PGP (part-time)",
+          "from": "2016",
+          "to": "2017"
+        }
+      ],
+      "credentials": [
+        "Chartered Accountant (ICAI), 2004"
+      ]
+    }
+  ],
+  "explicit_links": [],
+  "_explicit_links_note": "Investor-annotated links ('X reported to Y') go here. Empty on purpose: the demo shows links the engine infers from career overlap."
+}

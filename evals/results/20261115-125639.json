@@ -1,0 +1,24 @@
+{
+  "at": "2026-11-15 12:56:37",
+  "suites": {
+    "reco": {
+      "system": {
+        "queries": 28,
+        "ndcg@3": 0.992,
+        "recall@3_of_good": 1.0,
+        "mrr_best": 0.982,
+        "weak_queries": [
+          "kaynes/M&A: got ['kiran', 'arjun', 'sneha'], best ['sneha', 'arjun']"
+        ]
+      },
+      "baseline_rules": {
+        "queries": 28,
+        "ndcg@3": 0.977,
+        "recall@3_of_good": 1.0,
+        "mrr_best": 0.958
+      },
+      "_seconds": 2.5
+    }
+  },
+  "git": null
+}

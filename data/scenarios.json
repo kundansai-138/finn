@@ -1,0 +1,29 @@
+{
+  "_note": "SIMULATED events, injected so every card type is demonstrable on any day. Badged 'Simulated' in the UI. Timestamps are hours before 'now'.",
+  "events": [
+    {
+      "id": "sim-deepak-cfo",
+      "ticker": "DEEPAKNTR",
+      "hours_ago": 3,
+      "title": "Change in Key Managerial Personnel - Appointment of Chief Financial Officer",
+      "summary": "Board approved the appointment of Mr. Siddharth Kapadia as Chief Financial Officer and KMP with effect from December 1, 2026, succeeding the incumbent CFO who retires on November 30, 2026. Brief profile enclosed as per SEBI circular.",
+      "person": "siddharth"
+    },
+    {
+      "id": "sim-laurus-capex",
+      "ticker": "LAURUSLABS",
+      "hours_ago": 9,
+      "title": "Outcome of Board Meeting - Approval of capital expenditure",
+      "summary": "Board approved capex of Rs 2,400 crore over FY27-FY29 for a new CDMO manufacturing campus at Anakapalli, Andhra Pradesh, to be funded through internal accruals and debt.",
+      "amount_cr": 2400
+    },
+    {
+      "id": "sim-piind-acq",
+      "ticker": "PIIND",
+      "hours_ago": 20,
+      "title": "Acquisition - Execution of definitive agreement",
+      "summary": "Company has executed a definitive agreement to acquire 100% of Verdeca Biologicals GmbH (a fictional Germany-based biologicals company) for an enterprise value of EUR 210 million, subject to regulatory approvals.",
+      "amount_cr": 1950
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+# Render Blueprint: the app as a Docker web service; the database is managed Postgres (Neon).
+# Secrets marked `sync: false` are entered once in the Render dashboard, never committed.
+services:
+  - type: web
+    name: finn
+    runtime: docker
+    plan: free
+    region: singapore            # closest Render region to Indian users and the exchanges' servers
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL        # Neon connection string (pooled endpoint), sslmode=require
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: FINN_VAPID_PRIVATE_KEY   # from: python -m scripts.vapid_keys
+        sync: false
+      - key: FINN_VAPID_PUBLIC_KEY
+        sync: false
+      - key: FINN_VAPID_SUBJECT       # a mailto: or https: contact for push services
+        sync: false
+      - key: FINN_ADMIN_TOKEN    # guards POST /api/refresh (used by the scheduled GitHub Action)
+        generateValue: true
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: FINN_SCHEDULER
+        value: "on"

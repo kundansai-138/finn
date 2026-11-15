@@ -1,0 +1,12 @@
+{"ticker": "DIXON", "q": "How much capital will the Vivo joint venture need?", "relevant_if": [["vivo", "capex"], ["vivo", "investment"], ["vivo", "capital"]]}
+{"ticker": "DIXON", "q": "Why did cash get tied up in the business this half?", "relevant_if": [["working capital"], ["cash burn"], ["inventory"]]}
+{"ticker": "DIXON", "q": "What is the outlook for smartphone volumes in the second half?", "relevant_if": [["mobile", "volume"], ["smartphone", "volume"], ["mobile", "second half"]]}
+{"ticker": "DIXON", "q": "How profitable is the laptops and IT hardware segment?", "relevant_if": [["it hardware", "margin"], ["laptop", "margin"]]}
+{"ticker": "DIXON", "q": "What are the plans for display manufacturing?", "relevant_if": [["display"]]}
+{"ticker": "DIXON", "q": "Who are the anchor customers for exports?", "relevant_if": [["export", "customer"]]}
+{"ticker": "PIIND", "q": "How is the biologicals business doing?", "relevant_if": [["biological"]]}
+{"ticker": "PIIND", "q": "Why is the pharma segment still losing money?", "relevant_if": [["pharma", "loss"], ["pharma", "ebit"], ["pharma", "expense"]]}
+{"ticker": "PIIND", "q": "How much will they spend on capacity this year?", "relevant_if": [["capex"]]}
+{"ticker": "PIIND", "q": "What is happening to export demand for agrochemicals?", "relevant_if": [["export", "demand"], ["export", "growth"], ["export", "decline"], ["export", "inventory"]]}
+{"ticker": "PIIND", "q": "When do they expect growth to come back?", "relevant_if": [["growth", "quarter"], ["growth", "expect"], ["growth", "back"]]}
+{"ticker": "DIXON", "q": "What did they say about PLI incentives?", "relevant_if": [["pli"]]}

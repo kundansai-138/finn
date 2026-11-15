@@ -1,0 +1,9 @@
+.git
+.env
+.claude
+data/finn.sqlite3*
+data/test.sqlite3*
+data/vapid
+data/cache
+evals/results
+**/__pycache__

@@ -1,0 +1,80 @@
+{
+  "at": "2026-11-15 12:55:35",
+  "suites": {
+    "filings": {
+      "system": {
+        "n": 89,
+        "category_accuracy": 0.91,
+        "tier_accuracy": 0.933,
+        "critical_recall": 1.0,
+        "material_recall": 0.955,
+        "noise_suppression": 0.97,
+        "brief_precision": 0.913,
+        "misses": [
+          "HDFCBANK: Change in Directorate (gold routine, got material)",
+          "HDFCBANK: Shareholder Meeting / Postal Ballot-Outcome of Pos (gold material, got routine)",
+          "HDFCBANK: Change in Management (gold routine, got material)"
+        ],
+        "tier_confusion": {
+          "routine->routine": 65,
+          "routine->material": 2,
+          "material->material": 7,
+          "critical->critical": 11,
+          "material->critical": 3,
+          "material->routine": 1
+        }
+      },
+      "baseline_title_only": {
+        "n": 89,
+        "category_accuracy": 0.798,
+        "tier_accuracy": 0.888,
+        "critical_recall": 0.636,
+        "material_recall": 0.727,
+        "noise_suppression": 0.97,
+        "brief_precision": 0.889
+      },
+      "_seconds": 0.0
+    },
+    "reco": {
+      "system": {
+        "queries": 20,
+        "ndcg@3": 1.0,
+        "recall@3_of_good": 1.0,
+        "mrr_best": 1.0
+      },
+      "baseline_rules": {
+        "queries": 20,
+        "ndcg@3": 0.997,
+        "recall@3_of_good": 1.0,
+        "mrr_best": 1.0
+      },
+      "_seconds": 2.4
+    },
+    "retrieval": {
+      "system_hybrid": {
+        "questions": 12,
+        "recall@5": 0.917,
+        "mrr": 0.764
+      },
+      "baseline_bm25": {
+        "questions": 12,
+        "recall@5": 0.917,
+        "mrr": 0.681
+      },
+      "note": "Relevance is keyword-defined (silver labels): a passage counts if it contains every term of any listed group.",
+      "_seconds": 1.9
+    },
+    "agent": {
+      "mode": "rules (no model key)",
+      "cases": 12,
+      "entity_accuracy": 1.0,
+      "tool_recall": 1.0,
+      "grounded_rate": 1.0,
+      "no_invention_on_unanswerable": 1.0,
+      "p50_ms": 253,
+      "failures": [],
+      "_seconds": 19.0
+    }
+  },
+  "git": null
+}

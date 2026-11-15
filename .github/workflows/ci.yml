@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:                              # same engine + extensions as local (docker compose) and production
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: finn
+          POSTGRES_USER: finn_admin
+          POSTGRES_PASSWORD: finn_admin_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U finn_admin -d finn" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://finn_app:finn_app_local@localhost:5432/finn_test
+      PGPASSWORD: finn_admin_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Create the app role, extensions and test database
+        run: psql -h localhost -U finn_admin -d finn -v ON_ERROR_STOP=1 -f docker/initdb/01-app-role.sql
+      - name: Tests (incl. row-level security, push, latency budgets)
+        run: python -m pytest -q
+      - name: Evals that need no network (filing triage, recommender)
+        env:
+          DATABASE_URL: postgresql+psycopg://finn_app:finn_app_local@localhost:5432/finn
+        run: python -m evals.run filings reco
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: evals/results/

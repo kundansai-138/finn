@@ -1,0 +1,18 @@
+# Free hosting sleeps when idle, which stops the in-process scheduler. This wakes the app on the
+# exchange's schedule and triggers ingestion: every 30 min in market hours, and after the close.
+name: refresh
+
+on:
+  schedule:
+    - cron: "*/30 4-10 * * 1-5"   # 09:30–15:30 IST, weekdays (UTC = IST − 5:30)
+    - cron: "15 13 * * 1-5"       # 18:45 IST: end-of-day prices + full refresh
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger refresh
+        run: |
+          curl -fsS --retry 3 --retry-delay 20 --max-time 300 -X POST "${{ secrets.FINN_URL }}/api/refresh" \
+            -H "X-FINN-Admin: ${{ secrets.FINN_ADMIN_TOKEN }}"

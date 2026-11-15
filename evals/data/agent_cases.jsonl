@@ -1,0 +1,12 @@
+{"q": "How is Dixon's margin holding up, and why?", "ticker": "DIXON", "tools": ["company_overview", "search_transcripts"], "thread": "dixon"}
+{"q": "and their working capital?", "ticker": "DIXON", "tools": ["financials"], "statement": "ratios", "thread": "dixon"}
+{"q": "Who can intro me to the new CFO of Deepak Nitrite?", "person": "siddharth", "tools": ["route_to_person"]}
+{"q": "Who should I call about PI Industries' acquisition?", "ticker": "PIIND", "tools": ["who_can_help"]}
+{"q": "How is Titan's cash conversion?", "ticker": "TITAN", "tools": ["financials"], "statement": "cash_flow"}
+{"q": "What did PI Industries guide for FY27?", "ticker": "PIIND", "tools": ["promises", "search_transcripts"]}
+{"q": "What changed across my portfolio this week?", "tools": ["filings"]}
+{"q": "Who knows semiconductors?", "tools": ["who_can_help"]}
+{"q": "What is Laurus Labs' debt level?", "ticker": "LAURUSLABS", "tools": ["financials"], "statement": "balance_sheet"}
+{"q": "Why did HAL's stock move today?", "ticker": "HAL", "tools": ["price"]}
+{"q": "What will the Sensex do tomorrow?", "unanswerable": true}
+{"q": "Tell me something interesting", "unanswerable": true}

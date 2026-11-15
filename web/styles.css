@@ -773,3 +773,30 @@ button:active, .list-row:active, .nrow:active, [role="link"]:active { transform:
 .mover { display: flex; width: 100%; gap: 6px; justify-content: space-between; align-items: baseline; font-size: 11.5px; margin-top: 3px; min-height: 20px; }
 .mover .mt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--ink-2); }
 .mover b { font-family: var(--mono); font-weight: 500; flex: none; }
+
+/* Light theme by default; red and green carry state; an amber ring marks companies with updates */
+:root {
+  --bg: #F7F8FB; --surface: #FFFFFF; --surface-2: #F0F2F6; --ink: #0B1220; --ink-2: #3A4458; --ink-3: #5E6A80;
+  --line: #E3E7EE; --line-2: #CBD2DD; --chip: #ECEFF4;
+  --pos: #0E8A3E; --pos-soft: #DCF5E5; --neg: #D1342B; --neg-soft: #FDE3E0;
+  --upd: #F59E0B; --upd-soft: #FEF3D7; color-scheme: light;
+}
+.tile .tc { font-weight: 600; }
+.tile.up .tc { color: var(--pos); }
+.tile.down .tc { color: var(--neg); }
+.tile.filing { outline: none; box-shadow: inset 0 0 0 3px var(--upd), inset 0 0 16px color-mix(in oklab, var(--upd) 45%, transparent);
+  animation: tile-in .5s var(--spring) backwards, upd-glow 2.4s ease-in-out .6s infinite; }
+@keyframes upd-glow { 50% { box-shadow: inset 0 0 0 3px var(--upd), inset 0 0 26px color-mix(in oklab, var(--upd) 70%, transparent); } }
+.tile.move { outline: 2px dashed var(--upd); outline-offset: -5px; }
+.tile .tdot { top: 7px; right: 7px; width: 8px; height: 8px; background: var(--upd); animation: dot-ping 1.8s ease-out infinite; }
+@keyframes dot-ping { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--upd) 70%, transparent); } 100% { box-shadow: 0 0 0 9px transparent; } }
+.tile.sel { box-shadow: 0 0 0 2px var(--ink), var(--lift); }
+.tile.filing.sel { box-shadow: inset 0 0 0 3px var(--upd), 0 0 0 2px var(--ink), var(--lift); }
+.lg-filing { outline: none; box-shadow: inset 0 0 0 2px var(--upd); }
+.lg-move { outline: 2px dashed var(--upd); outline-offset: -2px; }
+.lg-up { background: color-mix(in oklab, var(--pos) 45%, var(--surface)); }
+.lg-dn { background: color-mix(in oklab, var(--neg) 45%, var(--surface)); }
+.nrow.upd { border-color: color-mix(in oklab, var(--upd) 55%, var(--line)); box-shadow: inset 4px 0 0 var(--upd), var(--shadow); }
+.nrow.upd.mv { box-shadow: inset 4px 0 0 color-mix(in oklab, var(--upd) 60%, var(--line-2)), var(--shadow); }
+.need-hook { background: var(--upd-soft); }
+@media (hover: hover) { .nrow.upd:hover { box-shadow: inset 4px 0 0 var(--upd), var(--lift); } }

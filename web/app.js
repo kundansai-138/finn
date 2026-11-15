@@ -241,13 +241,13 @@ function Treemap({ tiles }) {
   const nodes = useMemo(() => squarify(tiles.filter((t) => t.weight > 0).sort((a, b) => b.weight - a.weight).map((t) => ({ ...t, value: t.weight })), W, H), [tiles, W, H]);
   return html`<div ref=${ref} class="tmap" style=${`height:${H}px`} role="list" aria-label="Your holdings, sized by weight">
     ${nodes.map((n, i) => {
-      const c = n.change_pct || 0, mix = c ? Math.min(42, Math.abs(c) * 15) + 6 : 0;
+      const c = n.change_pct || 0, mix = c ? Math.min(58, Math.abs(c) * 20) + 12 : 0;
       const bg = `color-mix(in oklab, var(${c >= 0 ? "--pos" : "--neg"}) ${mix}%, var(--surface))`;
       return html`<button role="listitem" style=${`left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;background:${bg};animation-delay:${Math.min(i, 20) * 22}ms`}
         aria-label=${`${n.name}, ${sgn(c, 1)}${n.status ? ", needs a look" : ""}`} aria-pressed=${sel?.ticker === n.ticker}
-        class=${`tile ${n.status || ""} ${sel?.ticker === n.ticker ? "sel" : ""}`}
+        class=${`tile ${c > 0 ? "up" : c < 0 ? "down" : ""} ${n.status || ""} ${sel?.ticker === n.ticker ? "sel" : ""}`}
         onClick=${() => { haptic(8); sel?.ticker === n.ticker ? go(`/c/${n.ticker}`) : setSel(n); }}>
-        <span class="tt">${n.ticker}</span>${n.h >= 38 && html`<span class="tc">${sgn(c, 1)}</span>`}${n.h >= 58 && n.w >= 54 && html`<span class="tw">${n.weight}%</span>`}
+        ${n.status === "filing" && html`<i class="tdot" aria-hidden="true"></i>`}<span class="tt">${n.ticker}</span>${n.h >= 38 && html`<span class="tc">${sgn(c, 1)}</span>`}${n.h >= 58 && n.w >= 54 && html`<span class="tw">${n.weight}%</span>`}
       </button>`;
     })}
   </div>
@@ -279,7 +279,7 @@ function Glance({ tiles }) {
 
 function NeedRow({ n }) {
   const open = () => go(`/c/${n.ticker}`);
-  return html`<div class="nrow" role="link" tabindex="0" onClick=${open} onKeyDown=${(e) => e.key === "Enter" && open()}>
+  return html`<div class=${`nrow upd ${n.move ? "mv" : ""}`} role="link" tabindex="0" onClick=${open} onKeyDown=${(e) => e.key === "Enter" && open()}>
     <div class="need-meta"><span class="tick">${n.ticker}</span><span>${n.label}</span><span>·</span><span>${ago(n.ts)}</span>${n.simulated && html`<span class="badge sim">Simulated</span>`}</div>
     <div class="need-title">${n.company}: ${n.title}</div>
     ${n.hook ? html`<div class="need-hook"><${Avatar} p=${n.hook.person} cls="sm" /><span>${n.hook.text}</span></div>`
@@ -363,7 +363,7 @@ function RadarView({ openRules, rulesVersion }) {
         </div>
         <${Glance} tiles=${d.tiles} />
         <${Treemap} tiles=${d.tiles} />
-        <div class="legend2"><span><i class="lg-filing"></i>filed something that matters</span><span><i class="lg-move"></i>moved, no filing</span><span>size = weight</span></div>
+        <div class="legend2"><span><i class="lg-filing"></i>has an update</span><span><i class="lg-move"></i>moved, no filing</span><span><i class="lg-up"></i>up</span><span><i class="lg-dn"></i>down</span><span>size = weight</span></div>
       </div>
       ${d.needs.length > 0 && html`<div class="section">
         <div class="section-h"><h2>Needs a look</h2><span class="tiny muted">swipe when handled</span></div>

@@ -27,7 +27,7 @@ from typing import Any
 from ..config import DATA
 
 TIE_BASE = {"friend": 0.85, "mentor": 0.85, "ex-colleague": 0.75, "classmate": 0.65,
-            "founder": 0.55, "met": 0.45, "expert": 0.35}
+            "founder": 0.55, "met": 0.45, "expert": 0.35, "to-meet": 0.2}
 LARGE_ORGS = {"reliance", "tcs", "hdfcbank", "infosys", "icicibank", "mckinsey", "deloitte",
               "goldman", "bain", "kotak-ie", "hal", "sunpharma"}
 FN_AFFINITY = {
@@ -39,13 +39,17 @@ FN_AFFINITY = {
     frozenset({"risk", "product"}): 0.6, frozenset({"finance", "supply-chain"}): 0.5,
 }
 # Which functions are best placed to explain which kind of event.
+# Cause -> which functions understand it best (1.3 = ideal, 1.0 = neutral).
 EVENT_FN_BOOST = {
     "capex": {"manufacturing": 1.3, "operations": 1.3, "engineering": 1.15, "finance": 1.05},
     "M&A": {"strategy": 1.3, "banking": 1.25, "finance": 1.15},
     "management_change": {"finance": 1.25, "ir": 1.25, "strategy": 1.1},
     "results": {"ir": 1.2, "finance": 1.2, "research": 1.15, "sales": 1.1},
-    "litigation": {"regulatory": 1.3, "finance": 1.1},
+    "litigation": {"regulatory": 1.3, "legal": 1.3, "finance": 1.1},
     "credit_rating": {"finance": 1.2, "risk": 1.2},
+    "fund_raise": {"finance": 1.3, "banking": 1.3, "strategy": 1.1, "investing": 1.1},
+    "press_release": {"sales": 1.3, "marketing": 1.15, "product": 1.15},
+    "pledging": {"finance": 1.2, "risk": 1.15},
 }
 
 KNOWS = {
@@ -130,8 +134,11 @@ class Network:
         if not p:
             return {"score": 0.0, "label": "unknown"}
         tie = p.get("tie", {})
-        base = TIE_BASE.get(tie.get("type", "met"), 0.4)
-        last = datetime.strptime(tie.get("last_contact", "2020-01-01"), "%Y-%m-%d").date()
+        base = TIE_BASE.get(tie.get("type") or "met", 0.4)
+        if not tie.get("last_contact"):   # a lead added from the web: known of, never spoken to
+            return {"score": round(base * 0.5, 2), "label": "not yet contacted", "months_since": None,
+                    "last_contact": None, "type": tie.get("type"), "context": tie.get("context")}
+        last = datetime.strptime(tie["last_contact"], "%Y-%m-%d").date()
         months = max(0.0, (_today() - last).days / 30.4)
         recency = math.exp(-months / 24)  # ~17-month half-life
         score = base * (0.55 + 0.45 * recency) + min(0.12, 0.02 * tie.get("interactions_12m", 0))
@@ -298,7 +305,7 @@ class Network:
         out = []
         for cid, p in self.contacts.items():
             w = self.warmth(cid)
-            if w["months_since"] < min_months:
+            if w["months_since"] is None or w["months_since"] < min_months:
                 continue
             for r in sorted(p.get("roles", []), key=lambda r: _ym(r.get("to"), True), reverse=True):
                 evs = events_by_org.get(r["org"])

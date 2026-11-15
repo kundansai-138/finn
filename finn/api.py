@@ -18,12 +18,13 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import ask as ask_mod
-from . import db, portfolio, pull, push, scheduler, store
-from .context import DEFAULT_USER, reset_user, set_user
+from . import clock, db, portfolio, pull, push, scheduler, store
+from . import enrich as web_enrich
+from .context import DEFAULT_USER, current_user, reset_user, set_user
 from .config import WEB
 from .http import FetchError
 from .intel import llm
-from .network import graph
+from .network import discover, graph, nudges
 from .network import recommend as reco
 from .sources import prices
 
@@ -195,8 +196,92 @@ def network_feedback(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
 
 
 @app.get("/api/network/model")
-def network_model() -> dict[str, Any]:
-    return reco.model_card()
+def network_model(mode: str = Query("pull", pattern="^(pull|push)$")) -> dict[str, Any]:
+    return reco.model_card(mode)
+
+
+# ---- Flow 1: no one in the network? find people on the public web ----------
+@app.get("/api/network/discover")
+def network_discover(org: str | None = None, ticker: str | None = None, event: str | None = None, text: str = "",
+                     theme: str | None = None, company: str | None = None, force: bool = False) -> dict[str, Any]:
+    net = graph.get()
+    org = org or (net.org_for_ticker(ticker) if ticker else None)
+    return discover.discover(org=org, event=event, text=text[:600], theme=theme, company=company, force=force)
+
+
+# ---- Flow 3: grow the network, keep it warm ---------------------------------
+def _network_changed() -> None:
+    uid = current_user()
+    graph.invalidate(uid)
+    store.kv_delete_prefix("dossier", f"{uid}:")   # dossiers carry people; rebuild on next open
+
+
+@app.post("/api/network/contacts")
+def add_contact(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Add someone to your network: by hand, or a public-web lead from discovery ('to-meet')."""
+    name = (body.get("name") or "").strip()
+    if len(name) < 3:
+        raise HTTPException(422, "A name is required")
+    net = graph.get()
+    org_name = (body.get("org_name") or "").strip()
+    oid = body.get("org_id") or (discover.resolve_org(net, org_name) if org_name else None)
+    if not oid and org_name:
+        oid = store.org_ensure(org_name)
+    hit = net.resolve(name, org_hint=oid)
+    if hit and hit["id"] in net.contacts:   # dedupe: same person already in your network
+        return {"id": hit["id"], "existed": True, "person": net.person_card(hit["id"])}
+    title = (body.get("title") or "").strip()
+    lead = bool(body.get("lead"))
+    today = clock.now().date().isoformat()
+    person = {"name": name, "headline": f"{title}, {net.org_name(oid) if oid else org_name}".strip(", "),
+              "source": body.get("source_url"), "tags": body.get("tags") or [],
+              "roles": [{"org": oid, "title": title or "—", "function": discover.infer_function(title),
+                         "from": body.get("since_role"), "to": None}] if oid else []}
+    tie = {"type": "to-meet" if lead else (body.get("tie_type") or "met"),
+           "context": (body.get("context") or ("Found on the public web" if lead else ""))[:300],
+           "since": today, "last_contact": None if lead else (body.get("last_contact") or today),
+           "interactions_12m": 0 if lead else 1}
+    pid, existed = store.contact_add(person, tie)
+    _network_changed()
+    return {"id": pid, "existed": existed, "person": graph.get().person_card(pid)}
+
+
+@app.post("/api/network/contacts/{pid}/touch")
+def touch_contact(pid: str, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """'I spoke to them': resets the keep-in-touch clock."""
+    on = body.get("date") or clock.now().date().isoformat()
+    r = store.contact_touch(pid, on, body.get("note"))
+    if r is None:
+        raise HTTPException(404, "Not in your network")
+    _network_changed()
+    return {**r, "warmth": graph.get().warmth(pid)}
+
+
+@app.get("/api/network/nudges")
+def network_nudges(limit: int = 10, all: bool = False) -> dict[str, Any]:
+    items = nudges.compute(limit=limit, include_all=all)
+    return {"items": items, "method": nudges.__doc__.strip().split("\n\n")[1] if nudges.__doc__ else ""}
+
+
+@app.post("/api/network/nudges/{pid}/draft")
+def nudge_draft(pid: str) -> dict[str, Any]:
+    try:
+        return nudges.draft(pid)
+    except KeyError:
+        raise HTTPException(404, "Not in your network")
+
+
+# ---- Flow 2: web context for a pushed filing --------------------------------
+@app.get("/api/brief/{item_id}/web")
+def brief_item_web(item_id: str, force: bool = False) -> dict[str, Any]:
+    a = store.ann_get(item_id)
+    if a is None:
+        raise HTTPException(404, "Unknown filing")
+    item = {**a, "company": next((h["name"] for h in portfolio.holdings() + portfolio.research() if h["ticker"] == a["ticker"]), a["ticker"])}
+    web = web_enrich.enrich(item, force=force)
+    if web is None:
+        return {"status": "unavailable" if not llm.enabled() else "not eligible", "facts": [], "people": []}
+    return {"status": "ok", **web}
 
 
 # ---- Ask FINN agent ---------------------------------------------------------

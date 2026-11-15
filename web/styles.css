@@ -460,3 +460,20 @@ input, textarea, select { font-size: 16px !important; }
 .tl-axis, .fnode sup { font-size: 11px; }
 .egraph .elabel, .egraph .nsub { font-size: 11px; }
 .fold .linkish, .linkish { min-width: 44px; justify-content: center; }
+
+/* Network flows: web leads, web context, keep-in-touch */
+.badge.web { background: var(--chip); color: var(--ink-2); border: 1px dashed var(--ink-3); }
+.lead { padding: 12px 0; border-top: 1px solid var(--line); }
+.lead:first-of-type { border-top: 0; padding-top: 4px; }
+.srcq { margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--line); font-style: italic; overflow-wrap: anywhere; }
+.webctx a { text-decoration: none; white-space: nowrap; }
+.nudge { padding: 12px 0; border-top: 1px solid var(--line); }
+.nudge:first-child { border-top: 0; }
+.prio { width: 44px; height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; flex: none; }
+.prio i { display: block; height: 100%; background: var(--accent); }
+.addform { display: grid; gap: 10px; }
+.addform label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-3); }
+.addform input, .addform select { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--surface); color: var(--ink); font: inherit; width: 100%; box-sizing: border-box; }
+.pos { color: var(--pos); }
+.pbtn svg { width: 15px; height: 15px; flex: none; }
+.tap { min-height: 44px; display: inline-flex; align-items: center; padding: 0; }

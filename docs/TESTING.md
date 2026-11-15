@@ -4,7 +4,7 @@ Three different questions, three different tools:
 
 | Question | Tool | Command |
 |---|---|---|
-| Does the code do what it was written to do? | **Tests** (pytest, 44 tests, real Postgres) | `python -m pytest -q` |
+| Does the code do what it was written to do? | **Tests** (pytest, 68 tests, real Postgres; 4 more live) | `python -m pytest -q` |
 | Are the AI judgement calls *good*? | **Evals**: labelled ground truth, each scored against a simpler baseline | `python -m evals.run` |
 | Is it fast enough, under load, on a phone? | **Performance**: profiling, latency budgets, load test, mobile audit | `python -m scripts.loadtest` |
 
@@ -23,8 +23,9 @@ Setup: `docker compose up -d db`. Tests use the separate `finn_test` database, r
 | Agent | invented tools dropped; an ungrounded draft is repaired; tool plans | hallucination control |
 | Push | payload encrypted (aes128gcm), VAPID-signed, sent once, expired devices forgotten, a dead device doesn't block the rest | uses a local mock push service |
 | Latency budgets | p95 limits on brief, recommender, portfolio, health | performance regressions fail CI |
+| Network flows (24 scenarios, `tests/test_flows.py`) | cause ranking (named subject beats generic insider; sector themes don't override the event); web leads verified against the page they cite (invented URL and conflated name dropped); fact-checks need every number on the page; trusted sources first; budget and cache; push engine gates weak matches; nudges rank overdue × value × reason, logging a call clears them, weekly push cap, the contact's name never reaches the model | the web is where hallucination enters; these pin the checks in code |
 
-`live`-marked tests (`pytest -m live`) hit the real sources to detect upstream HTML changes; they're kept out of CI.
+`live`-marked tests (`pytest -m live`) hit the real sources to detect upstream HTML changes; they're kept out of CI. `FINN_TEST_LLM=on python -m pytest -m live tests/test_flows_live.py -s` runs the three network flows against the real web and model (~$0.15). They assert properties that must hold whatever the web says today: everything shown is verified, above the bar, labelled, and connected to the network where a route exists.
 
 ## 2. Evals (quality vs ground truth)
 
@@ -33,15 +34,19 @@ Results are saved to `evals/results/<timestamp>.json`, so runs are comparable ov
 | Suite | Ground truth | FINN | Baseline |
 |---|---|---|---|
 | Filing triage | 89 real filings hand-labelled (category + materiality) | critical recall **1.00**, material recall **0.955**, noise suppressed 0.97, category accuracy 0.91 | title-only: 0.64 / 0.73 / 0.97 / 0.80 |
-| "Who should I call" | 28 queries with graded relevance | NDCG@3 **0.992**, MRR 0.982 | original rules: 0.977, 0.958 |
+| "Who should I call" | 28 queries with graded relevance | NDCG@3 **0.998**, MRR **1.0** (was 0.992 / 0.982 before cause-based ranking) | original rules: 0.977, 0.958 |
+| Push vs pull engine (`modes`) | same 28 queries; plus derived "call today" labels (grade −1 for a dormant contact) | push: 97% of names shown on an alert are good calls (39 shown); NDCG −0.01 | pull engine on alerts: 89% (47 shown) |
 | Transcript retrieval | 12 questions, keyword-defined relevance (silver labels) | recall@5 0.917, MRR **0.764** | BM25 only: 0.917, 0.681 |
 | Agent routing (no key) | 12 cases incl. follow-ups and unanswerables | entity 1.0, tool recall 1.0, grounded 1.0, no invention 1.0 | — |
 
 **What the evals found** (that's what they're for):
 - Title-only triage misses a third of the critical filings, because companies bury news under "General Updates". Reading the body fixes it.
 - **The first recommender eval was too easy:** both systems scored ~1.0, so it measured nothing. Harder queries, where the event type should change the answer, now separate them.
-- They also exposed a real weakness. For an OSAT joint venture at Kaynes, the sales insider still outranks the two semiconductor-assembly specialists, because "worked there" outweighs topic expertise. Left visible rather than tuned away; the principled fixes are topic-conditioned ranking or learning from feedback.
+- They also exposed a real weakness: for an OSAT joint venture at Kaynes, the sales insider outranked the two semiconductor-assembly specialists, because "worked there" outweighed topic expertise. Fixed with cause-conditioned ranking (role-level topic credit; insider discount when a filing names a subject the company isn't mainly in); see [SCORING.md](SCORING.md).
+- The `modes` suite rejected two push designs before the third: an additive warmth weight lost on both label sets, and a product of probabilities let reachability swamp saturated relevance scores. Multiplying in odds space won where it matters, on the two names an alert shows.
 - Hybrid retrieval doesn't find more passages than BM25 here, but it ranks the right one higher (MRR +0.08).
+
+**First run of the agent suite with a model key (15 Nov 2026):** entity 1.0, tool recall 0.875, grounded 0.917, no invention on unanswerables **0.833**, p50 24 s. Two cases answered what should have been declined ("What will the Sensex do tomorrow?", "Tell me something interesting"), and one Laurus debt answer wasn't fully grounded. Logged as open work, not tuned away here.
 
 **With a model key, two things change.** The agent suite runs the model planner, and two more suites become possible:
 - a promises-ledger suite (extraction precision and recall, plus verdict accuracy against hand-labelled guidance);

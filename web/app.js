@@ -273,7 +273,14 @@ function BriefView({ openPerson, openRules, rulesVersion }) {
         <${RoutineFold} r=${data.routine} count=${data.counts.routine} level=${level} setLevel=${setLevel} />
       </div>
 
-      ${data.reconnect.length > 0 && html`<div class="section">
+      ${data.nudges?.length > 0 && html`<div class="section">
+        <div class="section-h"><h2>Keep in touch</h2><button class="linkish small" onClick=${() => go("/network")}>All</button></div>
+        <div class="card" style="padding:2px 14px">${data.nudges.map((n) => html`<div class="nudge" style="cursor:pointer" onClick=${() => openPerson(n.person.id)}>
+          <div class="person"><${Avatar} p=${n.person} /><div style="flex:1;min-width:0"><div class="pname">${n.person.name} <${Warmth} w=${n.warmth} /></div>
+            <div class="small ink2">${n.reason}</div></div></div></div>`)}</div>
+      </div>`}
+
+      ${!data.nudges?.length && data.reconnect.length > 0 && html`<div class="section">
         <div class="section-h"><h2>Natural reasons to reconnect</h2></div>
         ${data.reconnect.map((r) => html`<div class="card" style="padding:12px">
           <div class="person" style="cursor:pointer" onClick=${() => openPerson(r.person.id, r)}>
@@ -352,12 +359,14 @@ function ItemCard({ i, openPerson }) {
           <div class="phead">${i.best_call.person.headline}</div></div>
       </div>
       <p class="because">${i.best_call.because}</p>
-      <button class="linkish tiny" style="margin-top:6px" onClick=${() => setGraph(!graph)}>${graph ? "Hide" : "Why this person?"} · ${Math.round(i.best_call.score * 100)}% match</button>
+      <button class="linkish tiny tap" onClick=${() => setGraph(!graph)}>${graph ? "Hide" : "Why this person?"} · ${Math.round(i.best_call.score * 100)}% match</button>
       ${graph && html`<${WhyPerson} rec=${i.best_call} />`}
     </div>`}
 
     ${!i.best_call && !i.person && i.people?.length > 0 && html`<div class="callout"><span class="upper">Close to this</span>
       <${PeopleList} people=${i.people} onPerson=${openPerson} compact /></div>`}
+
+    <${WebContext} i=${i} openPerson=${openPerson} />
 
     ${why && html`<div class="why"><ul>${i.why_ranked.map((w) => html`<li>${w}</li>`)}</ul></div>`}
     <div class="card-foot">
@@ -467,8 +476,14 @@ function DossierView({ ticker, openPerson }) {
     </section>
 
     <section class="dsec" id="people">
-      <h2>Who can help</h2><p class="sub">People in your network closest to ${d.name}${d.themes?.length ? `, its competitors, or ${d.themes.join(", ")}` : ""}.</p>
-      <div class="card"><${PeopleList} people=${d.people} onPerson=${openPerson} /></div>
+      ${d.cause && html`<h2>Who can explain the latest update</h2>
+        <p class="sub">${d.cause.filing.category_label} · ${ago(d.cause.filing.ts)}: ${d.cause.filing.title}. Ranked for this event and subject, not the company in general.</p>
+        <div class="card"><${PeopleList} people=${d.cause.people} onPerson=${openPerson} />
+          <div class="tiny muted" style="margin-top:8px">${d.cause.coverage.level === "strong" ? "Your network covers this: " : "Coverage is thin: "}${d.cause.coverage.reason}.</div>
+          <${WebLeads} query=${d.cause.web_query} auto=${d.cause.coverage.search_web} /></div>`}
+      <h2 style=${d.cause ? "margin-top:22px" : ""}>Who can help</h2><p class="sub">People in your network closest to ${d.name}${d.themes?.length ? `, its competitors, or ${d.themes.join(", ")}` : ""}.</p>
+      <div class="card"><${PeopleList} people=${d.people} onPerson=${openPerson} />
+        ${!d.cause && !d.people?.length && html`<${WebLeads} query=${{ company: d.name, theme: d.themes?.[0], text: d.name }} auto=${true} />`}</div>
     </section>
 
     <section class="dsec" id="filings">
@@ -537,6 +552,120 @@ function PortfolioView() {
   </div>`;
 }
 
+// ---------------------------------------------------------------------------
+// Flow 1: people from the public web when the network has no one
+// ---------------------------------------------------------------------------
+const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return "source"; } };
+const age = (y) => (y == null ? "" : y < 0.15 ? "this month" : y < 1 ? `${Math.round(y * 12)} mo old` : `${y.toFixed(0)} yr old`);
+const qs = (o) => Object.entries(o).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+
+function WebLeads({ query, auto }) {
+  const [st, setSt] = useState(auto ? "loading" : "idle");
+  const [r, setR] = useState(null);
+  const [added, setAdded] = useState({});
+  const run = () => { setSt("loading"); api(`/api/network/discover?${qs(query)}`).then((x) => { setR(x); setSt("done"); }).catch((e) => { setR({ error: e.message }); setSt("done"); }); };
+  useEffect(() => { if (auto) run(); }, [JSON.stringify(query)]);
+  const add = async (c) => {
+    const res = await api("/api/network/contacts", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: c.name, title: c.title, org_name: c.org_name, org_id: c.org_id, lead: true, source_url: c.source.url }) });
+    haptic(15); setAdded({ ...added, [c.name]: res.existed ? "Already in your network" : "Added. FINN will nudge you to reach out." });
+  };
+  if (st === "idle") return html`<button class="pbtn ghost" style="margin-top:10px" onClick=${run}>Look beyond your network</button>`;
+  if (st === "loading") return html`<div class="callout"><span class="upper">Searching the public web</span><div class="small muted">Finding named people and checking each one against its source. About 10 seconds.</div></div>`;
+  if (r?.error || r?.status === "unavailable") return html`<p class="tiny muted">${r.reason || r.error}</p>`;
+  return html`<div class="callout">
+    <span class="upper">From the public web · not in your network</span>
+    ${!r.candidates.length && html`<div class="small muted">No one the sources name clearly enough to suggest.</div>`}
+    ${r.candidates.map((c) => html`<div class="lead">
+      <div class="person"><${Avatar} p=${{ name: c.name }} cls="target" /><div style="min-width:0"><div class="pname">${c.name}</div><div class="phead">${c.title} · ${c.org_name}</div></div></div>
+      ${c.why && html`<div class="small ink2" style="margin-top:6px">${c.why}</div>`}
+      ${c.intro?.[0] && html`<div class="small" style="margin-top:6px">Way in: <b>${c.intro[0].name}</b> ${c.intro[0].relation}</div>`}
+      <div class="tiny muted" style="margin-top:6px">${Math.round(c.fit * 100)}% fit · verified on <a href=${c.source.url} target="_blank" rel="noopener">${host(c.source.url)} ↗</a>${c.source.age_years != null ? ` · ${age(c.source.age_years)}` : ""}${c.verified.how === "result title" ? " · headline only" : ""}${c.current ? "" : " · may have moved on"}</div>
+      ${c.source.quote && html`<div class="tiny ink2 srcq">${c.source.quote}</div>`}
+      <div style="margin-top:8px">${added[c.name] ? html`<span class="tiny pos">${added[c.name]}</span>` : html`<button class="pbtn" onClick=${() => add(c)}>${Icon.plus} Add to network</button>`}</div>
+    </div>`)}
+    ${r.already_in_network?.length > 0 && html`<div class="tiny muted" style="margin-top:8px">Also named: ${r.already_in_network.map((x) => x.name).join(", ")}, already in your network.</div>`}
+    <div class="tiny muted" style="margin-top:8px">Secondary source. Each name was checked against the page it came from; unverifiable names were dropped${r.stats?.unverified ? ` (${r.stats.unverified} this time)` : ""}.</div>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Flow 2: verified web context on a pushed filing
+// ---------------------------------------------------------------------------
+function WebContext({ i, openPerson }) {
+  const [w, setW] = useState(i.web || null);
+  const [busy, setBusy] = useState(false);
+  if (!w) {
+    if (i.simulated || i.tier === "routine") return null;
+    const get = () => { setBusy(true); api(`/api/brief/${encodeURIComponent(i.id)}/web`).then(setW).catch(() => setW({ facts: [], people: [], status: "error" })).finally(() => setBusy(false)); };
+    return html`<button class="linkish tiny tap" disabled=${busy} onClick=${get}>${busy ? "Reading the web…" : "Add context from the web"}</button>`;
+  }
+  if (!w.facts?.length && !w.people?.length) return html`<div class="tiny muted" style="margin-top:8px">The web adds nothing verifiable beyond the filing.</div>`;
+  return html`<div class="callout webctx">
+    <span class="upper">From the web · secondary to the filing</span>
+    ${w.facts.map((f) => html`<div class="small" style="margin-top:4px">${f.text} <a class="tiny muted" href=${f.source.url} target="_blank" rel="noopener">${host(f.source.url)}${f.source.tier && f.source.tier !== "other" ? ` · ${f.source.tier}` : ""} ↗</a></div>`)}
+    ${w.people.map((p) => html`<div style="margin-top:10px">
+      <div class="small"><b>${p.name}</b> · ${p.event_role || p.title}</div>
+      ${p.prior?.length > 0 && html`<div class="tiny muted">Before: ${p.prior.map((r) => `${r.title}, ${r.org_name}${r.from ? ` (${r.from}–${r.to || "now"})` : ""}`).join(" · ")}</div>`}
+      ${p.routes?.length > 0 && html`<div class="tiny" style="margin-top:2px">Ask <b class="link" onClick=${() => openPerson(p.routes[0].id)}>${p.routes[0].name}</b>, who ${p.routes[0].relation === "works there now" ? `works at ${p.routes[0].via_org}` : p.routes[0].relation.replace("there", `at ${p.routes[0].via_org}`)}</div>`}
+    </div>`)}
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Flow 3: keep in touch, add people
+// ---------------------------------------------------------------------------
+function KeepInTouch({ openPerson, limit = 6 }) {
+  const [d, setD] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [done, setDone] = useState({});
+  const load = () => api(`/api/network/nudges?limit=${limit}`).then(setD).catch(() => setD({ items: [] }));
+  useEffect(() => { load(); }, []);
+  if (!d) return html`<div class="skeleton"></div>`;
+  if (!d.items.length) return html`<div class="card small muted">No one is overdue. Nice.</div>`;
+  const touch = async (id) => { await api(`/api/network/contacts/${id}/touch`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); haptic(15); setDone({ ...done, [id]: true }); };
+  const draft = async (id) => { setDrafts({ ...drafts, [id]: "…" }); const r = await api(`/api/network/nudges/${id}/draft`, { method: "POST" }); setDrafts({ ...drafts, [id]: r.text }); };
+  return html`<div class="card" style="padding:2px 14px">${d.items.map((n) => html`<div class="nudge">
+    <div class="person" style="cursor:pointer" onClick=${() => openPerson(n.person.id)}><${Avatar} p=${n.person} cls=${n.lead ? "target" : ""} />
+      <div style="flex:1;min-width:0"><div class="pname">${n.person.name} ${n.lead ? html`<span class="badge web">New lead</span>` : html`<${Warmth} w=${n.warmth} />`}</div>
+        <div class="phead">${n.person.headline}</div></div>
+      <div class="prio" title="Priority"><i style=${`width:${Math.round(n.scores.priority * 100)}%`}></i></div></div>
+    <div class="small ink2" style="margin:6px 0 0">${done[n.person.id] ? "Logged. The clock restarts today." : n.reason}</div>
+    ${!done[n.person.id] && html`<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="pbtn" onClick=${() => touch(n.person.id)}>I spoke to them</button>
+      <button class="pbtn ghost" onClick=${() => draft(n.person.id)}>Draft a note</button></div>`}
+    ${drafts[n.person.id] && html`<div class="draft" contenteditable="true">${drafts[n.person.id]}</div>
+      <div style="display:flex;gap:8px;align-items:center"><button class="linkish tiny" onClick=${() => navigator.clipboard?.writeText(drafts[n.person.id])}>Copy</button><span class="tiny muted">FINN never sends anything for you.</span></div>`}
+  </div>`)}</div>`;
+}
+
+function AddContact({ onAdded }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ name: "", title: "", org_name: "", context: "", last_contact: new Date().toISOString().slice(0, 10), tie_type: "met" });
+  const [msg, setMsg] = useState("");
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api("/api/network/contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
+      haptic(15); setMsg(r.existed ? `${f.name} is already in your network.` : `Added ${f.name}.`); setOpen(false); onAdded?.();
+      setF({ ...f, name: "", title: "", org_name: "", context: "" });
+    } catch (err) { setMsg(err.message); }
+  };
+  if (!open) return html`<div style="display:flex;gap:10px;align-items:center"><button class="pbtn ghost" onClick=${() => { setOpen(true); setMsg(""); }}>${Icon.plus} Add someone</button>${msg && html`<span class="tiny ink2">${msg}</span>`}</div>`;
+  return html`<form class="card addform" onSubmit=${save}>
+    <label>Name<input required minlength="3" value=${f.name} onInput=${set("name")} autocomplete="off" /></label>
+    <label>Role<input value=${f.title} onInput=${set("title")} placeholder="e.g. CFO" /></label>
+    <label>Company<input value=${f.org_name} onInput=${set("org_name")} /></label>
+    <label>How you know them<input value=${f.context} onInput=${set("context")} placeholder="e.g. met at the Kaynes analyst day" /></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <label>Relationship<select value=${f.tie_type} onChange=${set("tie_type")}>${["met", "ex-colleague", "classmate", "friend", "mentor", "expert"].map((t) => html`<option value=${t}>${t}</option>`)}</select></label>
+      <label>Last spoke<input type="date" value=${f.last_contact} onInput=${set("last_contact")} /></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px"><button class="pbtn" type="submit">Save</button><button class="pbtn ghost" type="button" onClick=${() => setOpen(false)}>Cancel</button></div>
+  </form>`;
+}
+
 function ModelCard() {
   const [m, setM] = useState(null);
   useEffect(() => { api("/api/network/model").then(setM).catch(() => {}); }, []);
@@ -554,12 +683,17 @@ function ModelCard() {
 
 function NetworkView({ openPerson, openAsk }) {
   const [d, setD] = useState(null);
-  useEffect(() => { api("/api/network").then(setD); }, []);
+  const [v, setV] = useState(0);
+  useEffect(() => { api("/api/network").then(setD); }, [v]);
   const cold = d ? d.people.filter((p) => p.warmth.label === "dormant") : [];
   return html`<div>
     <div class="topbar"><div class="wordmark">Network <small>${d ? `${d.people.length} people` : ""}</small></div></div>
     <div class="hero"><h1 style="font-size:28px">What your network knows.</h1><p>Expertise inferred from careers, not tags. Tap a theme to ask.</p></div>
     <div class="section">
+      <div class="section-h"><h2>Keep in touch</h2></div>
+      <p class="tiny muted" style="margin:-4px 0 8px">Ranked by how far past your usual rhythm you are, how much they matter to your portfolio, and whether there's a reason to call now.</p>
+      <${KeepInTouch} key=${v} openPerson=${openPerson} />
+      <div style="margin:10px 0 18px"><${AddContact} onAdded=${() => setV(v + 1)} /></div>
       ${!d && html`<div class="skeleton"></div>`}
       ${d && html`<div class="card" style="padding:2px 14px">${d.themes.map((t) => html`<div class="theme-row">
         <h4 style="cursor:pointer" onClick=${() => openAsk(`who knows ${t.theme}?`)}>${t.theme}</h4>
@@ -756,7 +890,8 @@ function WhyPerson({ rec }) {
   return html`<div class="whyp" onClick=${(e) => e.stopPropagation()}>
     <${EvidenceGraph} g=${rec.graph} />
     <div class="contrib">${cs.slice(0, 5).map((c) => html`<div class="crow"><span>${c.label}</span><div class="bar"><i style=${`width:${Math.round((c.value / max) * 100)}%`}></i></div><b class="num">${c.value.toFixed(1)}</b></div>`)}</div>
-    <div class="tiny muted">Match ${Math.round(rec.score * 100)}%: a learned ranking over these signals${rec.would_know ? `. Would know: ${rec.would_know}` : ""}.</div>
+    ${rec.call_value ? html`<div class="tiny muted">Worth a call today: can help ${Math.round(rec.call_value.relevance * 100)}% × likely to pick up ${Math.round(rec.call_value.reachable * 100)}% × knowledge fresh ${Math.round(rec.call_value.fresh * 100)}%${rec.would_know ? `. Would know: ${rec.would_know}` : ""}.</div>`
+      : html`<div class="tiny muted">Match ${Math.round(rec.score * 100)}%: a learned ranking over these signals${rec.would_know ? `. Would know: ${rec.would_know}` : ""}.</div>`}
     ${sent ? html`<div class="small ink2" style="margin-top:8px">${sent.err || (sent.label ? "Noted. Matches like this will rank higher for you." : "Noted. Matches like this will rank lower for you.")}</div>`
       : html`<div class="fb"><button class="pbtn ghost" onClick=${() => fb(1)}>Helpful</button><button class="pbtn ghost" onClick=${() => fb(0)}>Not relevant</button></div>`}
   </div>`;

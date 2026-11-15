@@ -19,7 +19,8 @@ from . import clock, companies, db, portfolio, store
 from .config import DATA, INCLUDE_SCENARIOS
 from .intel import classify as C
 from .intel import financials, llm
-from .network import graph
+from . import enrich as web_enrich
+from .network import graph, nudges
 from .network import recommend as reco
 from .sources import nse_rss, prices
 
@@ -131,10 +132,11 @@ _APPOINTEE = re.compile(r"appoint(?:ment|ed)? of (?:Mr\.?|Ms\.?|Mrs\.?|Dr\.?|Shr
 
 
 def _people_line(org: str | None, category: str, text: str = "") -> list[dict]:
-    """Recommender call: who in the network is best placed to explain this filing."""
+    """Who to call about this filing *today*: push-mode ranking, where reachability (warmth) and fresh
+    experience weigh as much as depth, unlike the research (pull) ranking."""
     if not org:
         return []
-    return reco.recommend(org, event=category, text=text, k=2, min_score=0.5)
+    return reco.recommend(org, event=category, text=text, k=2, min_score=0.5, mode="push")
 
 
 def _one_liner(r: dict) -> str | None:
@@ -221,6 +223,7 @@ def brief(window: str = "24h", level: str = "material") -> dict[str, Any]:
     alerts = [a for a in alerts if a["id"] not in done_ids]
     for i in shown:
         _enrich(i, net)
+    web_enrich.attach(shown)   # verified web context, if the scheduler already fetched it (never blocks)
     shown.sort(key=lambda i: -i["score"])
     routine = [i for i in items if i["score"] < C.MATERIAL]
     hidden_material = [i for i in items if C.MATERIAL <= i["score"] < lvl_min]
@@ -234,6 +237,11 @@ def brief(window: str = "24h", level: str = "material") -> dict[str, Any]:
         if i["tier"] != "routine" and i["org"]:
             events_by_org[i["org"]].append(i)
     reconnect = net.reconnect(events_by_org)
+    try:
+        keep_in_touch = nudges.compute(limit=3)
+    except Exception as e:  # a nudge bug must not take the brief down
+        log.warning("nudges failed: %s", e)
+        keep_in_touch = []
 
     n_cos = len({i["ticker"] for i in items})
     crit = [i for i in shown if i["tier"] == "critical"]
@@ -250,6 +258,7 @@ def brief(window: str = "24h", level: str = "material") -> dict[str, Any]:
         "alerts": alerts, "items": shown,
         "routine": {"groups": routine_groups.most_common(), "items": routine if level == "all" else []},
         "reconnect": reconnect,
+        "nudges": keep_in_touch,
         "eod_date": next((s.get("metrics", {}).get("date") for s in eod.values() if s.get("metrics")), None),
         "last_refresh": db.kv_get("meta", "last_refresh"),
     }

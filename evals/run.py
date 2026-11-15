@@ -8,8 +8,9 @@ and every suite is scored against a simpler baseline, so an improvement has to b
 
   filings    filing triage vs 89 real filings hand-labelled with category + materiality
              baseline: classify by title only (no body escalation)
-  reco       "who should I call" vs graded relevance judgements for 20 queries
+  reco       "who should I call" vs graded relevance judgements for 28 queries
              baseline: the original rule-based ranking (graph.Network.people_for_org)
+  modes      pull (research) vs push (call today) ranking on the same queries: each should win its own job
   retrieval  transcript search: does a passage that answers the question land in the top 5?
              baseline: BM25 alone (no char n-grams, no Q&A boost, no fusion)
   agent      routing and planning: right entity, right tools, grounded answer, no invention
@@ -184,7 +185,48 @@ def eval_agent() -> dict:
     return out
 
 
-SUITES = {"filings": eval_filings, "reco": eval_reco, "retrieval": eval_retrieval, "agent": eval_agent}
+def eval_modes() -> dict:
+    """Pull vs push ranking: what each mode is for, measured.
+
+    pull_gold   the expert relevance labels (who understands this best)
+    call_today  derived labels for 'who to call today': the same grades, minus one for a contact you
+                haven't spoken to in over 10 months (dormant). Derived, not independent: a check that
+                each mode does the job it was designed for, not proof that the trade-off is right.
+    Expect: pull wins on pull_gold, push wins on call_today, and push gives up little relevance.
+    """
+    from finn.context import set_user
+    from finn.network import graph
+    from finn.network import recommend as R
+
+    set_user("demo")
+    net = graph.get()
+    gold = json.loads((DATA / "reco_gold.json").read_text(encoding="utf-8"))
+    dormant = {pid for pid in net.contacts if net.warmth(pid)["label"] == "dormant"}
+    res: dict = {}
+    for mode in ("pull", "push"):
+        a, b, top_dormant, shown, good, cold = [], [], 0, 0, 0, 0
+        for q in gold:
+            ranked = [r["person"]["id"] for r in R.recommend(q.get("org"), q.get("theme"), q.get("event"), q.get("text", ""), k=5, mode=mode)]
+            g = q["grades"]
+            call = {p: max(0, v - (1 if p in dormant else 0)) for p, v in g.items()}
+            a.append(_ndcg(ranked, g))
+            b.append(_ndcg(ranked, call))
+            top_dormant += bool(ranked) and ranked[0] in dormant
+            # the push surface itself: at most 2 people, only above the 0.5 gate (as push._people_line)
+            surf = [r["person"]["id"] for r in R.recommend(q.get("org"), q.get("theme"), q.get("event"), q.get("text", ""), k=2, min_score=0.5, mode=mode)]
+            shown += len(surf)
+            good += sum(g.get(p, 0) >= 2 for p in surf)
+            cold += sum(p in dormant for p in surf)
+        res[mode] = {"ndcg3_pull_gold": round(sum(a) / len(a), 3), "ndcg3_call_today": round(sum(b) / len(b), 3),
+                     "top_pick_dormant": f"{top_dormant}/{len(gold)}",
+                     "surface_precision": round(good / max(1, shown), 3), "surface_shown": shown,
+                     "surface_dormant": round(cold / max(1, shown), 3)}
+    top = lambda q, m: [r["person"]["id"] for r in R.recommend(q.get("org"), q.get("theme"), q.get("event"), q.get("text", ""), k=1, mode=m)]  # noqa: E731
+    res["reordered_top1"] = f"{sum(top(q, 'pull') != top(q, 'push') for q in gold)}/{len(gold)}"
+    return res
+
+
+SUITES = {"filings": eval_filings, "reco": eval_reco, "modes": eval_modes, "retrieval": eval_retrieval, "agent": eval_agent}
 
 
 def main(argv: list[str]) -> None:

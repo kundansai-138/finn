@@ -297,6 +297,17 @@ def ann_since(since_iso: str, tickers: Iterable[str] | None = None) -> list[dict
         return [_ann(r) for r in c.execute(q.order_by(announcements.c.ts.desc()))]
 
 
+def ann_get(ann_id: str) -> dict | None:
+    with ro() as c:
+        r = c.execute(select(announcements).where(announcements.c.id == ann_id)).first()
+    return _ann(r) if r else None
+
+
+def kv_delete_prefix(ns: str, prefix: str) -> None:
+    with tx() as c:
+        c.execute(delete(kv).where(kv.c.ns == ns, kv.c.key.like(prefix.replace("%", r"\%") + "%")))
+
+
 def ann_for_ticker(ticker: str, limit: int = 40, category: str | None = None) -> list[dict]:
     q = select(announcements).where(announcements.c.ticker == ticker)
     if category:
@@ -359,6 +370,21 @@ def prices_many(tickers: list[str], limit: int = 260) -> dict[str, dict]:
         for k in s:
             s[k] = s[k][-limit:]
     return out
+
+
+def kv_get_many(ns: str, keys: list[str]) -> dict[str, Any]:
+    """One round trip for a list of keys (the brief attaches cached web context to every card)."""
+    if not keys:
+        return {}
+    with ro() as c:
+        return {r.key: json.loads(r.value) for r in c.execute(select(kv.c.key, kv.c.value).where(kv.c.ns == ns, kv.c.key.in_(keys)))}
+
+
+def spend_since(since_ts: float, purposes: list[str]) -> float:
+    with ro() as c:
+        v = c.execute(select(func.sum(llm_ledger.c.cost_usd)).where(llm_ledger.c.at >= since_ts,
+                                                                    llm_ledger.c.purpose.in_(purposes))).scalar()
+    return float(v or 0.0)
 
 
 def kv_ages(ns: str, keys: list[str]) -> dict[str, float]:
@@ -463,6 +489,59 @@ def network_raw(user_id: str | None = None) -> dict[str, Any]:
            "roles": rmap.get(u.self_person_id, []) if u else [], "education": emap.get(u.self_person_id, []) if u else []}
     return {"orgs": org_map, "you": you, "people": contacts_out, "public_profiles": public,
             "explicit_links": [{"a": l["a"], "b": l["b"], "context": l["context"], "strength": l["strength"]} for l in links]}
+
+
+def _slug(s: str) -> str:
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")[:40] or "x"
+
+
+def org_ensure(name: str, themes: list[str] | None = None) -> str:
+    """An organisation by name, created if new. Reference data (a public company name), so shared."""
+    oid = _slug(name)
+    with tx() as c:
+        if c.execute(select(orgs.c.id).where(orgs.c.id == oid)).first() is None:
+            c.execute(orgs.insert(), {"id": oid, "name": name.strip(), "kind": "added", "themes": themes or []})
+    return oid
+
+
+def contact_add(person: dict, tie: dict, user_id: str | None = None) -> tuple[str, bool]:
+    """Add (or update) a private contact: profile, roles and the relationship. Returns (id, existed).
+    The id is the user-facing one; storage namespaces it by owner like seeded contacts."""
+    uid = _uid(user_id)
+    local = person.get("id") or _slug(person["name"])
+    pid = f"{uid}:{local}"
+    with tx() as c:
+        existed = c.execute(select(people.c.id).where(people.c.id == pid)).first() is not None
+        _upsert(c, people, {"id": pid, "owner_user_id": uid, "name": person["name"].strip(), "headline": person.get("headline"),
+                            "location": person.get("location"), "simulated": False, "source": person.get("source"),
+                            "credentials": person.get("credentials"), "tags": person.get("tags") or []}, ["id"])
+        if person.get("roles"):
+            c.execute(delete(roles).where(roles.c.person_id == pid))
+            c.execute(roles.insert(), [{"person_id": pid, "org_id": r["org"], "title": r.get("title"), "function": r.get("function"),
+                                        "start": r.get("from"), "end": r.get("to")} for r in person["roles"]])
+        _upsert(c, contacts, {"user_id": uid, "person_id": pid, "tie_type": tie.get("type", "met"), "context": tie.get("context"),
+                              "since": str(tie.get("since") or ""), "last_contact": tie.get("last_contact"),
+                              "interactions_12m": int(tie.get("interactions_12m") or 0)}, ["user_id", "person_id"])
+    return local, existed
+
+
+def contact_touch(local_id: str, on: str, note: str | None = None, user_id: str | None = None) -> dict | None:
+    """Log a conversation: moves last_contact and counts the interaction."""
+    uid = _uid(user_id)
+    pid = f"{uid}:{local_id}"
+    with tx() as c:
+        row = c.execute(select(contacts).where(contacts.c.user_id == uid, contacts.c.person_id == pid)).first()
+        if row is None:
+            return None
+        vals = {"last_contact": on, "interactions_12m": (row.interactions_12m or 0) + 1}
+        if row.tie_type == "to-meet":     # first real conversation turns a lead into a contact
+            vals["tie_type"] = "met"
+        if note:
+            vals["context"] = note[:300]
+        c.execute(update(contacts).where(contacts.c.user_id == uid, contacts.c.person_id == pid).values(**vals))
+    return {"id": local_id, **vals}
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 A mobile-first investor agent, installable on your phone. **Push** tells you what changed and why it matters. **Pull** researches any NSE company from primary sources. **The Network** sits under both and turns "what happened" into "who do I know who can explain this".
 
-> Design, architecture and trade-offs (including why PostgreSQL): [docs/DESIGN.md](docs/DESIGN.md) · How it's tested: [docs/TESTING.md](docs/TESTING.md)
+> Design, architecture and trade-offs (including why PostgreSQL): [docs/DESIGN.md](docs/DESIGN.md) · How people are scored in each flow: [docs/SCORING.md](docs/SCORING.md) · How it's tested: [docs/TESTING.md](docs/TESTING.md)
 
 ## Run it
 
@@ -23,7 +23,8 @@ Without a model key everything still runs, on deterministic fallbacks. With one,
 ## Test it
 
 ```bash
-python -m pytest -q                        # 44 tests on the real Postgres test database (no model cost)
+python -m pytest -q                        # 68 tests on the real Postgres test database (no model cost)
+FINN_TEST_LLM=on python -m pytest -m live tests/test_flows_live.py -s   # the network flows against the real web (~$0.15)
 python -m evals.run                        # quality vs labelled ground truth, each against a baseline
 python -m scripts.loadtest --users 20      # throughput and p50/p95/p99 per endpoint
 ```
@@ -33,8 +34,10 @@ python -m scripts.loadtest --users 20      # throughput and p50/p95/p99 per endp
 - **Brief**: a finite, ranked brief for a time window (24h / 3d / 7d / 30d), filtered by a *signal dial* (Critical / Material / Everything). Routine filings are folded into one counted line. Each material card ends in a person: who's coming in and your way to them, or the best person to call and why.
 - **Moved**: end-of-day price and volume alerts against your own thresholds, flagged when no filing explains the move.
 - **Dossier** (type any ticker): promises vs delivery from the last four concalls, the latest quarter (QoQ / YoY), trajectory, cash and balance sheet, bull vs bear, the people who can help, and recent filings.
-- **Network**: expertise inferred from careers, contacts going cold, and natural reasons to reconnect.
+- **Network**: expertise inferred from careers, and **Keep in touch**: who you're losing touch with, ranked by how far past your usual rhythm you are, how much they matter to the portfolio, and whether there's a reason to call now ("I spoke to them", "Draft a note", "Add someone").
   - "Who should I call" is a recommender: candidates from graph walks, domain similarity and career links, ranked by a model that learns from your *Helpful / Not relevant* taps.
+  - **Cause-based**: a dossier ranks people for its latest material update (event + the subject the filing names), and when no one you know covers it, finds verified people on the public web, with an intro route, to *Add to network*.
+  - Alerts use a different engine: the expected value of one call today (can help × will pick up × knowledge is fresh), and the brief attaches verified web context (facts and people, each checked against its source page).
   - Each pick has a "Why this person?" evidence graph.
 - **Ask FINN** (any question in the ask bar, or "Ask FINN" on a card or dossier) is a conversational agent with a plan → execute → answer → verify graph you can watch run. It has tools over filings, transcripts (hybrid retrieval), financials, your network and the web. It keeps thread memory and your standing preferences, and every figure in an answer is checked against its cited source.
 
@@ -61,11 +64,13 @@ finn/
   intel/      classify.py (rules-first filing triage) · financials.py (deterministic maths)
               guidance.py (promises ledger) · llm.py (routing, caching, cost ledger)
   network/    graph.py (warmth, overlap links, paths, reconnect, entity resolution)
-              recommend.py (two-stage recommender, learned ranking, evidence graphs)
+              recommend.py (two-stage recommender, pull and push engines, evidence graphs)
+              discover.py (verified public-web people) · nudges.py (keep-in-touch)
   agent/      core.py (plan-execute-verify graph) · runtime.py (state-graph runtime) · tools.py
               retrieval.py (Q&A chunking, hybrid BM25 + char-TF-IDF, RRF) · memory.py · verify.py
   store.py    the database: schema, row-level security, per-user data access (Postgres; SQLite fallback)
   push.py     refresh job + the brief          notify.py   Web Push alerts
+  enrich.py   verified web context for pushed filings (trusted sources first, budgeted)
   pull.py     the dossier                      scheduler.py  ingestion jobs (leader-elected)
   ask.py      ask-bar router                   api.py      FastAPI: API, PWA files, metrics
 web/          Preact + htm, no build step: app.js · mobile.js (gestures, install, push) · sw.js · manifest

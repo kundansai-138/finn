@@ -1,0 +1,162 @@
+{
+  "at": "2026-11-15 14:32:15",
+  "suites": {
+    "filings": {
+      "system": {
+        "n": 89,
+        "category_accuracy": 0.91,
+        "tier_accuracy": 0.933,
+        "critical_recall": 1.0,
+        "material_recall": 0.955,
+        "noise_suppression": 0.97,
+        "brief_precision": 0.913,
+        "misses": [
+          "HDFCBANK: Change in Directorate (gold routine, got material)",
+          "HDFCBANK: Shareholder Meeting / Postal Ballot-Outcome of Pos (gold material, got routine)",
+          "HDFCBANK: Change in Management (gold routine, got material)"
+        ],
+        "tier_confusion": {
+          "routine->routine": 65,
+          "routine->material": 2,
+          "material->material": 7,
+          "critical->critical": 11,
+          "material->critical": 3,
+          "material->routine": 1
+        }
+      },
+      "baseline_title_only": {
+        "n": 89,
+        "category_accuracy": 0.798,
+        "tier_accuracy": 0.888,
+        "critical_recall": 0.636,
+        "material_recall": 0.727,
+        "noise_suppression": 0.97,
+        "brief_precision": 0.889
+      },
+      "_seconds": 0.0
+    },
+    "reco": {
+      "system": {
+        "queries": 28,
+        "ndcg@3": 0.998,
+        "recall@3_of_good": 1.0,
+        "mrr_best": 1.0,
+        "weak_queries": []
+      },
+      "baseline_rules": {
+        "queries": 28,
+        "ndcg@3": 0.977,
+        "recall@3_of_good": 1.0,
+        "mrr_best": 0.958
+      },
+      "_seconds": 1.8
+    },
+    "modes": {
+      "pull": {
+        "ndcg3_pull_gold": 0.998,
+        "ndcg3_call_today": 0.99,
+        "top_pick_dormant": "10/28",
+        "surface_precision": 0.894,
+        "surface_shown": 47,
+        "surface_dormant": 0.277
+      },
+      "push": {
+        "ndcg3_pull_gold": 0.988,
+        "ndcg3_call_today": 0.977,
+        "top_pick_dormant": "10/28",
+        "surface_precision": 0.974,
+        "surface_shown": 39,
+        "surface_dormant": 0.256
+      },
+      "reordered_top1": "1/28",
+      "_seconds": 0.8
+    },
+    "retrieval": {
+      "system_hybrid": {
+        "questions": 12,
+        "recall@5": 0.917,
+        "mrr": 0.764
+      },
+      "baseline_bm25": {
+        "questions": 12,
+        "recall@5": 0.917,
+        "mrr": 0.681
+      },
+      "note": "Relevance is keyword-defined (silver labels): a passage counts if it contains every term of any listed group.",
+      "_seconds": 0.5
+    },
+    "agent": {
+      "mode": "model",
+      "cases": 12,
+      "entity_accuracy": 1.0,
+      "tool_recall": 0.875,
+      "grounded_rate": 0.917,
+      "no_invention_on_unanswerable": 0.833,
+      "p50_ms": 24370,
+      "failures": [
+        {
+          "q": "How is Dixon's margin holding up, and why?",
+          "entity_ok": true,
+          "tool_recall": 0.5,
+          "grounded": true,
+          "no_invention": true,
+          "ms": 23704,
+          "tools": [
+            "financials",
+            "search_transcripts",
+            "promises"
+          ]
+        },
+        {
+          "q": "Who can intro me to the new CFO of Deepak Nitrite?",
+          "entity_ok": true,
+          "tool_recall": 0.0,
+          "grounded": true,
+          "no_invention": true,
+          "ms": 30277,
+          "tools": [
+            "filings",
+            "who_can_help",
+            "web_search"
+          ]
+        },
+        {
+          "q": "What is Laurus Labs' debt level?",
+          "entity_ok": true,
+          "tool_recall": 1.0,
+          "grounded": false,
+          "no_invention": true,
+          "ms": 24370,
+          "tools": [
+            "financials",
+            "financials"
+          ]
+        },
+        {
+          "q": "What will the Sensex do tomorrow?",
+          "entity_ok": true,
+          "tool_recall": 1.0,
+          "grounded": true,
+          "no_invention": false,
+          "ms": 29935,
+          "tools": [
+            "web_search"
+          ]
+        },
+        {
+          "q": "Tell me something interesting",
+          "entity_ok": true,
+          "tool_recall": 1.0,
+          "grounded": true,
+          "no_invention": false,
+          "ms": 23964,
+          "tools": [
+            "filings"
+          ]
+        }
+      ],
+      "_seconds": 304.5
+    }
+  },
+  "git": "52e3be1"
+}

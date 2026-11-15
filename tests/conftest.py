@@ -5,7 +5,7 @@
 
 TEST_DATABASE_URL comes from the environment or .env. Without it, tests fall back to a throwaway
 SQLite file and the Postgres-only tests (row-level security) are skipped. The model is always off
-in tests (nothing here spends money) and the scheduler never starts.
+in tests (nothing here spends money) unless FINN_TEST_LLM=on for the live suite, and the scheduler never starts.
 """
 import os
 import pathlib
@@ -24,7 +24,7 @@ def _from_env_file(key: str) -> str | None:
 
 _url = os.environ.get("TEST_DATABASE_URL") or _from_env_file("TEST_DATABASE_URL")
 os.environ["DATABASE_URL"] = _url or f"sqlite:///{(ROOT / 'data' / 'test.sqlite3').as_posix()}"
-os.environ["FINN_LLM"] = "off"
+os.environ["FINN_LLM"] = os.environ.get("FINN_TEST_LLM", "off")   # "on" only for `-m live` runs that should spend
 os.environ["FINN_SCHEDULER"] = "off"
 os.environ["FINN_SCENARIOS"] = "on"
 

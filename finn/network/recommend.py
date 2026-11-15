@@ -41,15 +41,86 @@ from .graph import EVENT_FN_BOOST, KNOWS, Network, _ym, _yr, get as get_network
 # ---------------------------------------------------------------------------
 # Features and priors
 # ---------------------------------------------------------------------------
-FEATURES = ["insider", "adjacent", "domain", "graph", "text", "function_fit", "recency", "seniority", "warmth"]
+FEATURES = ["insider", "adjacent", "domain", "topic", "graph", "text", "function_fit", "recency", "seniority", "warmth"]
 FEATURE_LABEL = {
     "insider": "Worked there", "adjacent": "Competitor / customer side", "domain": "Domain overlap",
-    "graph": "Network proximity", "text": "Matches the topic", "function_fit": "Right function",
-    "recency": "Recent experience", "seniority": "Seniority", "warmth": "Warm relationship",
+    "topic": "Knows this exact topic", "graph": "Network proximity", "text": "Matches the wording",
+    "function_fit": "Right function for the cause", "recency": "Recent experience", "seniority": "Seniority",
+    "warmth": "Warm relationship",
 }
-PRIOR = {"bias": -4.6, "insider": 3.0, "adjacent": 1.8, "domain": 1.7, "graph": 1.1, "text": 0.9,
-         "function_fit": 1.0, "recency": 0.7, "seniority": 0.5, "warmth": 1.3}
+# Two scoring engines, because the questions differ:
+#   pull  "who understands this best?" (research). A logistic model over all the features; warmth is
+#         one signal among many, because for research you can always find a way to reach someone.
+#   push  "who should I call about this *today*?" (an alert just landed). The expected value of one
+#         call, a product, not a sum:
+#             EV = P(they can help) × P(they'll pick up) × freshness of what they know
+#         P(help) is the relevance model with warmth taken out; P(pick up) = 0.35 + 0.65·warmth
+#         (a dormant contact still answers sometimes); freshness = 0.6 + 0.4·recency of their
+#         relevant experience. Multiplying means warmth can only separate people of similar
+#         relevance: a strong tie never lifts someone who can't help, which an additive warmth
+#         weight did (measured in evals/run.py `modes`: the additive version lost on both label sets).
+PRIORS = {
+    "pull": {"bias": -4.6, "insider": 2.6, "adjacent": 1.8, "domain": 1.5, "topic": 2.2, "graph": 1.0, "text": 0.9,
+             "function_fit": 1.3, "recency": 0.6, "seniority": 0.5, "warmth": 0.9},
+    # push relevance: the same evidence minus warmth and recency, which enter as multipliers instead
+    "push": {"bias": -4.2, "insider": 2.6, "adjacent": 1.8, "domain": 1.5, "topic": 2.2, "graph": 1.0, "text": 0.9,
+             "function_fit": 1.3, "recency": 0.0, "seniority": 0.5, "warmth": 0.0},
+}
+REACH_FLOOR, FRESH_FLOOR = 0.35, 0.6
+
+
+def push_value(p_rel: float, f: dict[str, float]) -> tuple[float, dict[str, float]]:
+    """Multiply in odds space, not on saturated probabilities: relevance probabilities for qualified
+    people all sit at 0.95-0.99, so a raw product would let reachability swamp real differences in
+    relevance. log EV = logit(P help) + ln(reach) + ln(fresh): reach is worth at most ~1 log-odds unit."""
+    reach = REACH_FLOOR + (1 - REACH_FLOOR) * f["warmth"]
+    fresh = FRESH_FLOOR + (1 - FRESH_FLOOR) * f["recency"]
+    z = math.log(max(p_rel, 1e-9) / max(1 - p_rel, 1e-9)) + math.log(reach) + math.log(fresh)
+    return 1 / (1 + math.exp(-z)), {"relevance": round(p_rel, 3), "reachable": round(reach, 3), "fresh": round(fresh, 3)}
+PRIOR = PRIORS["pull"]
 LR, L2 = 0.6, 0.08
+
+# Topic extraction: the cause's own words often name a sub-domain the company's sector tags miss
+# ("OSAT" inside an electronics company, "pumped storage" inside a power utility).
+TOPIC_PATTERNS = {
+    "semiconductors": r"\bosat\b|semiconductor|\bchips?\b|\bfab\b|wafer|assembly (and|&) test",
+    "pharma cdmo": r"\bcdmo\b|contract (development|manufacturing)|\bapi\b manufactur|custom synthesis",
+    "agrochemicals": r"agro|crop protection|biological|pesticide|fungicide",
+    "specialty chemicals": r"specialty chem|fluoro|phenol|nitration",
+    "fluorochemicals": r"fluoro|refrigerant",
+    "power & renewables": r"pumped storage|\bsolar\b|\bwind\b|renewable|transmission|\bMW\b|\bGW\b",
+    "consumer lending": r"consumer (loan|finance|lending)|personal loan|credit card",
+    "rural lending": r"rural|tractor|vehicle finance|microfinance",
+    "quick commerce": r"dark store|quick commerce|instant delivery",
+    "electronics manufacturing": r"\bems\b|electronics manufactur|\bpcb\b|handset|smartphone assembl",
+    "retail": r"\bstores?\b|retail|fashion|apparel",
+    "defence": r"defen[cs]e|aircraft|helicopter|aerospace",
+    "cement": r"cement|clinker",
+    "it services": r"it services|software services|digital transformation",
+    "pharma": r"usfda|\bfda\b|warning letter|formulation|generic",
+}
+
+
+def topics_from(text: str) -> set[str]:
+    return {t for t, rx in TOPIC_PATTERNS.items() if re.search(rx, text or "", re.I)}
+
+
+def cause_topics(q: "Query") -> set[str]:
+    """The subject of the cause: topics named in its text, plus an explicit theme."""
+    return topics_from(q.text) | ({q.theme} if q.theme else set())
+
+
+def role_topic_match(net: Network, r: dict, topics: set[str]) -> float:
+    """How directly one role touched the topic: 1.0 the job itself names it ("Director, OSAT Program"),
+    0.7 it's the employer's main business, 0.25 it's a side business of the employer."""
+    if not topics:
+        return 0.0
+    if any(re.search(TOPIC_PATTERNS[t], r.get("title", ""), re.I) for t in topics if t in TOPIC_PATTERNS):
+        return 1.0
+    themes = net.orgs.get(r["org"], {}).get("themes", [])
+    if themes and themes[0] in topics:
+        return 0.7
+    return 0.25 if topics & set(themes) else 0.0
 
 
 def _seniority(title: str) -> float:
@@ -195,8 +266,15 @@ def index() -> Index:
 # ---------------------------------------------------------------------------
 # Learned weights (per investor), updated from feedback
 # ---------------------------------------------------------------------------
-def weights() -> dict[str, float]:
-    return {**PRIOR, **(store.reco_weights_get() or {})}
+def _stored() -> dict:
+    s = store.reco_weights_get() or {}
+    if s and "pull" not in s and "push" not in s:   # older single-mode format
+        s = {"pull": s}
+    return s
+
+
+def weights(mode: str = "pull") -> dict[str, float]:
+    return {**PRIORS[mode], **(_stored().get(mode) or {})}
 
 
 def _score(f: dict[str, float], w: dict[str, float]) -> tuple[float, dict[str, float]]:
@@ -211,10 +289,11 @@ class Query:
     theme: str | None = None
     event: str | None = None
     text: str = ""
+    mode: str = "pull"
 
     @property
     def key(self) -> str:
-        return hashlib.sha1(json.dumps([self.org, self.theme, self.event, self.text[:200]]).encode()).hexdigest()[:12]
+        return hashlib.sha1(json.dumps([self.org, self.theme, self.event, self.text[:200], self.mode]).encode()).hexdigest()[:12]
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +333,22 @@ def _features(ix: Index, q: Query, pid: str, ppr_norm: float, text_norm: float, 
             if rel > best_rel or (rel == best_rel and not r.get("to")):
                 best_role, best_rel = r, rel
     f["domain"] = float(max(0.0, ix.tv[pid] @ qvec)) if qvec.any() else 0.0
+    # Topic: years doing the *specific subject* the cause names, credited at role level so that
+    # working at a company that merely has a side business in it doesn't count as expertise.
+    topic_years, topic_role = 0.0, None
+    tq = cause_topics(q)
+    for r in p.get("roles", []):
+        m = role_topic_match(net, r, tq)
+        if m:
+            topic_years += m * _years(r) * math.exp(-_since(r) / 8)
+            if m >= 0.7 and (topic_role is None or not r.get("to")):
+                topic_role = r
+            if not any(b["org"] == r["org"] for b in bridges):
+                bridges.append({"kind": "theme", "org": r["org"], "role": r, "w": 0.45 * math.exp(-_since(r) / 6),
+                                "themes": sorted(tq & set(net.orgs.get(r["org"], {}).get("themes", []))) or sorted(tq)})
+    for _t in tq & set(p.get("tags", [])):
+        topic_years += 1.5
+    f["topic"] = min(1.0, topic_years / 6)
     f["graph"] = ppr_norm
     f["text"] = min(1.0, text_norm)
     fn = (best_role or {}).get("function") or (net.current_role(p) or {}).get("function")
@@ -261,6 +356,20 @@ def _features(ix: Index, q: Query, pid: str, ppr_norm: float, text_norm: float, 
         f["function_fit"] = max(0.0, (EVENT_FN_BOOST[q.event].get(fn, 1.0) - 1.0) / 0.3)
     elif best_role:
         f["function_fit"] = 0.4
+    # The cause has two halves: the event (what kind of action) and the subject the filing names
+    # ("an OSAT joint venture"). Someone who ran that specific subject fits the cause whatever the
+    # event type. Only subjects named in the text count here: a broad sector theme says nothing about
+    # which function is needed, so the event alone decides that.
+    named = topics_from(q.text)
+    if named:
+        direct = max((role_topic_match(net, r, named) for r in p.get("roles", [])), default=0.0)
+        if direct >= 0.7:
+            f["function_fit"] = max(f["function_fit"], 1.0 if direct >= 1.0 else 0.6)
+    # Insider knowledge is about the company, not necessarily the subject. When the cause names
+    # a subject the company isn't primarily in (a new venture), discount insiders who don't touch it.
+    if f["insider"] and named and not (named & set(org.get("themes", [])[:1])):
+        own = max((role_topic_match(net, r, named) for r in p.get("roles", []) if r["org"] == q.org), default=0.0)
+        f["insider"] *= 0.5 + 0.5 * max(own, min(1.0, f["function_fit"]))
     f["warmth"] = net.warmth(pid)["score"]
     # theme years for the evidence graph and the expertise map
     theme_years = {}
@@ -274,7 +383,7 @@ def _features(ix: Index, q: Query, pid: str, ppr_norm: float, text_norm: float, 
     kind_rank = {"insider": 0, "peer": 1, "customer": 1, "theme": 2}
     bridges.sort(key=lambda b: (kind_rank[b["kind"]], -b["w"]))
     return f, {"best_role": best_role, "function": fn, "bridges": bridges, "theme_years": theme_years,
-               "top_theme": (top_t, top_y)}
+               "top_theme": (top_t, top_y), "topic_role": topic_role, "topics": sorted(tq)}
 
 
 def _why(net: Network, f: dict, ctx: dict, contrib: dict, q: Query) -> list[str]:
@@ -296,7 +405,10 @@ def _why(net: Network, f: dict, ctx: dict, contrib: dict, q: Query) -> list[str]
     if not out and ctx.get("top_theme", (None,))[0]:
         t, y = ctx["top_theme"]
         out.append(f"{y:.0f} years in {t}, an adjacent domain")
-    if contrib.get("function_fit", 0) > 0.5 and ctx["function"]:
+    tr = ctx.get("topic_role")
+    if tr and f["topic"] >= 0.5 and not any(tr["title"] in o for o in out):
+        out.append(f"Worked directly on {', '.join(ctx['topics'])}: {tr['title'].split('→')[-1].strip()}, {net.org_name(tr['org'])}")
+    elif contrib.get("function_fit", 0) > 0.5 and ctx["function"] and q.event:
         out.append(f"{ctx['function'].replace('-', ' ').capitalize()} background suits a {q.event.replace('_', ' ')} question")
     return out[:3]
 
@@ -374,13 +486,14 @@ MEMO_MAX = 2000
 
 
 def recommend(org: str | None = None, theme: str | None = None, event: str | None = None,
-              text: str = "", k: int = 4, min_score: float = 0.0, diversify: bool = True) -> list[dict[str, Any]]:
+              text: str = "", k: int = 4, min_score: float = 0.0, diversify: bool = True,
+              mode: str = "pull") -> list[dict[str, Any]]:
     """Memoised per user: the brief asks about the same filings repeatedly. Cleared on feedback."""
-    key = (current_user(), org, theme, event, text, k, min_score, diversify)
+    key = (current_user(), org, theme, event, text, k, min_score, diversify, mode)
     hit = _memo.get(key)
     if hit is not None:
         return hit
-    out = _recommend(org, theme, event, text, k, min_score, diversify)
+    out = _recommend(org, theme, event, text, k, min_score, diversify, mode)
     if len(_memo) > MEMO_MAX:
         _memo.clear()
     _memo[key] = out
@@ -388,12 +501,13 @@ def recommend(org: str | None = None, theme: str | None = None, event: str | Non
 
 
 def _recommend(org: str | None, theme: str | None, event: str | None, text: str, k: int, min_score: float,
-               diversify: bool) -> list[dict[str, Any]]:
+               diversify: bool, mode: str = "pull") -> list[dict[str, Any]]:
     ix = index()
     net = ix.net
-    q = Query(org=org, theme=theme.lower() if theme else None, event=event, text=text or "")
+    q = Query(org=org, theme=theme.lower() if theme else None, event=event, text=text or "", mode=mode)
     o = net.orgs.get(org or "", {})
-    qthemes = list(o.get("themes", [])) + ([q.theme] if q.theme and q.theme in ix.t_idx else [])
+    qthemes = (list(o.get("themes", [])) + ([q.theme] if q.theme and q.theme in ix.t_idx else [])
+               + [t for t in topics_from(q.text) if t in ix.t_idx])
     qvec = np.zeros(len(ix.themes))
     for t in qthemes:
         if t in ix.t_idx:
@@ -428,17 +542,20 @@ def _recommend(org: str | None, theme: str | None, event: str | None, text: str,
     cands |= {ix.contacts[i] for i in np.argsort(-ts_n)[:4] if ts[i] > 0.08}
 
     # Stage 2: ranking
-    w = weights()
+    w = weights(mode)
     scored = []
     for pid in cands:
         i = ix.contacts.index(pid)
         f, ctx = _features(ix, q, pid, float(ppr_n[i]), float(ts_n[i]), qvec)
-        if not (f["insider"] or f["adjacent"] or f["domain"] >= 0.2 or f["graph"] >= 0.3):
+        if not (f["insider"] or f["adjacent"] or f["topic"] or f["domain"] >= 0.2 or f["graph"] >= 0.3):
             continue
         p_, contrib = _score(f, w)
+        parts = None
+        if mode == "push":
+            p_, parts = push_value(p_, f)
         if p_ < min_score:
             continue
-        scored.append((p_, pid, f, ctx, contrib))
+        scored.append((p_, pid, f, ctx, contrib, parts))
     scored.sort(key=lambda x: -x[0])
 
     # Stage 3: MMR diversity (don't stack three people from the same bridge company)
@@ -449,7 +566,7 @@ def _recommend(org: str | None, theme: str | None, event: str | None, text: str,
         def mmr(x):
             if not diversify or not picked:
                 return x[0]
-            bx = {b["org"] for b in x[3]["bridges"][:1]}
+            bx = {b["org"] for b in x[3]["bridges"][:1]}  # noqa: B023
             sim = max((1.0 if bx & {b["org"] for b in y[3]["bridges"][:1]} else float(ix.tv[x[1]] @ ix.tv[y[1]]) * 0.5) for y in picked)
             return lam * x[0] - (1 - lam) * sim
         best = max(pool, key=mmr)
@@ -457,7 +574,7 @@ def _recommend(org: str | None, theme: str | None, event: str | None, text: str,
         pool.remove(best)
 
     out = []
-    for p_, pid, f, ctx, contrib in picked:
+    for p_, pid, f, ctx, contrib, parts in picked:
         warm = net.warmth(pid)
         top = sorted(((kk, v) for kk, v in contrib.items() if v > 0.05), key=lambda kv: -kv[1])
         out.append({
@@ -473,7 +590,9 @@ def _recommend(org: str | None, theme: str | None, event: str | None, text: str,
             "evidence": [b["role"]["title"].split("→")[-1].strip() + ", " + net.org_name(b["org"]) +
                          f" ({_yr(b['role']['from'])}–{_yr(b['role'].get('to'))})" for b in ctx["bridges"][:3]],
             "graph": evidence_graph(net, pid, q, ctx, f),
-            "query": {"org": q.org, "theme": q.theme, "event": q.event, "text": q.text[:200], "key": q.key},
+            "query": {"org": q.org, "theme": q.theme, "event": q.event, "text": q.text[:200], "key": q.key, "mode": q.mode},
+            "mode": q.mode,
+            **({"call_value": parts} if parts else {}),
         })
     return out
 
@@ -483,24 +602,31 @@ def feedback(person_id: str, query: dict, label: int) -> dict[str, Any]:
     ix = index()
     if person_id not in ix.contacts:
         raise KeyError(person_id)
-    q = Query(org=query.get("org"), theme=query.get("theme"), event=query.get("event"), text=query.get("text") or "")
+    mode = query.get("mode") or "pull"
+    q = Query(org=query.get("org"), theme=query.get("theme"), event=query.get("event"), text=query.get("text") or "", mode=mode)
     # Recompute features exactly as they were scored
-    recs = {r["person"]["id"]: r for r in _recommend(q.org, q.theme, q.event, q.text, 50, 0.0, False)}
+    recs = {r["person"]["id"]: r for r in _recommend(q.org, q.theme, q.event, q.text, 50, 0.0, False, mode)}
     f = recs.get(person_id, {}).get("features") or dict.fromkeys(FEATURES, 0.0)
-    w = weights()
-    p_, _ = _score(f, w)
+    w = weights(mode)
+    prior = PRIORS[mode]
+    p_, _ = _score(f, w)   # push: learn P(help); reach and freshness stay fixed and explainable
     err = float(label) - p_
     for kk in FEATURES:
-        w[kk] += LR * (err * f[kk] - L2 * (w[kk] - PRIOR[kk]))
-    w["bias"] += LR * (err - L2 * (w["bias"] - PRIOR["bias"]))
-    store.reco_weights_put(w)
+        if mode == "push" and kk in ("warmth", "recency"):
+            continue
+        w[kk] += LR * (err * f[kk] - L2 * (w[kk] - prior[kk]))
+    w["bias"] += LR * (err - L2 * (w["bias"] - prior["bias"]))
+    stored = _stored()
+    stored[mode] = w
+    store.reco_weights_put(stored)
     for key in [k_ for k_ in _memo if k_[0] == current_user()]:   # rankings change with the weights
         _memo.pop(key, None)
     n = store.reco_feedback_add({"person_id": person_id, "query_key": q.key, "query": query, "label": int(label), "p_before": round(p_, 3)})
     return {"weights": {k: round(v, 3) for k, v in w.items()}, "n_feedback": n, "p_before": round(p_, 3)}
 
 
-def model_card() -> dict[str, Any]:
-    w = weights()
-    return {"features": [{"feature": k, "label": FEATURE_LABEL[k], "prior": PRIOR[k], "learned": round(w[k], 3)} for k in FEATURES],
+def model_card(mode: str = "pull") -> dict[str, Any]:
+    w = weights(mode)
+    return {"mode": mode, "features": [{"feature": k, "label": FEATURE_LABEL[k], "prior": PRIORS[mode][k], "learned": round(w[k], 3)}
+                                       for k in FEATURES],
             "bias": round(w["bias"], 3), "n_feedback": store.reco_feedback_count()}

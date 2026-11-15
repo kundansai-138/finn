@@ -28,6 +28,8 @@ from ..config import ANTHROPIC_API_KEY, LLM_ENABLED, MODEL_DEEP, MODEL_FAST
 log = logging.getLogger(__name__)
 
 # USD per 1M tokens: (input, output, cache_read)
+WEB_SEARCH_USD = 0.01
+MIN_MAX_TOKENS = 1024
 PRICES = {
     "claude-haiku-5-5": (0.10, 0.50, 0.01),
     "claude-sonnet-5-5": (2.00, 10.00, 0.10),
@@ -65,6 +67,9 @@ def _ledger(model: str, purpose: str, key: str, usage: Any | None, cached: bool)
         cw = getattr(usage, "cache_creation_input_tokens", 0) or 0
         pin, pout, pcr = PRICES.get(model, (4.0, 20.0, 0.2))
         cost = (it * pin + cw * pin * 1.25 + cr * pcr + ot * pout) / 1e6
+        # Server-side web search is billed per search on top of tokens ($10 per 1,000).
+        searches = getattr(getattr(usage, "server_tool_use", None), "web_search_requests", 0) or 0
+        cost += searches * WEB_SEARCH_USD
     store.ledger_add({"at": time.time(), "model": model, "purpose": purpose, "prompt_hash": key[:16], "input_tokens": it,
                       "output_tokens": ot, "cache_read_tokens": cr, "cost_usd": cost, "cached": int(cached)})
 
@@ -87,6 +92,10 @@ def complete(
     """
     if not LLM_ENABLED:
         return None
+    # Current models think adaptively before answering, and thinking counts against max_tokens: a
+    # 120-token cap can be spent entirely on thinking and return nothing. Only generated tokens are
+    # billed, so a floor costs nothing and removes a silent failure (found by the live tests).
+    max_tokens = max(max_tokens, MIN_MAX_TOKENS)
     model = MODEL_DEEP if tier == "deep" else MODEL_FAST
     key = _key(model, system, (cache_prefix or "") + "\n\n" + prompt, schema)
     hit = db.kv_get("llm", key)
@@ -138,6 +147,10 @@ def complete(
         return None
     text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
     _ledger(model, purpose, key, resp.usage, cached=False)
+    if resp.stop_reason == "max_tokens":
+        log.warning("LLM hit max_tokens (%s): %d chars of answer", purpose, len(text))
+    if not text:
+        return None
     if schema:
         try:
             out: Any = json.loads(text)

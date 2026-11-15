@@ -107,6 +107,39 @@ def _bull_bear(c: dict, snap: dict, traj: dict, bs: dict, cash: dict, ledger: di
 
 
 _build_locks: dict[str, threading.Lock] = defaultdict(threading.Lock)
+CAUSE_DAYS = 45
+
+
+def _cause(c: dict, org: str | None, themes: list[str]) -> dict[str, Any] | None:
+    """Pull after an update: the latest material filing is the cause. Rank the network for *that*
+    (event type + the subject the filing names), not for the company in general, and say whether
+    the network covers it; if it doesn't, the app goes to the public web (network/discover.py)."""
+    from datetime import datetime, timedelta
+
+    from .network import discover
+
+    cutoff = clock.now() - timedelta(days=CAUSE_DAYS)
+    for a in c.get("announcements", [])[:20]:
+        cat, sub, base = C.classify(a["title"], a.get("summary", ""))
+        if C.tier_of(base) == "routine" or cat in ("unclassified", "earnings_call", "investor_meetings", "agm_egm", "postal_ballot"):
+            continue
+        try:
+            if datetime.fromisoformat(a["ts"]) < cutoff:
+                break
+        except (KeyError, ValueError):
+            continue
+        text = f"{C.clean_title(a['title'])}. {a.get('summary') or ''}"
+        if org:
+            res = discover.people_for_cause(org, event=cat, text=text, k=4, mode="pull", web=False)
+        else:
+            res = discover.people_for_cause(None, event=cat, text=f"{c['name']} {text}", theme=themes[0] if themes else None,
+                                            k=4, mode="pull", web=False)
+        return {"filing": {"title": C.clean_title(a["title"]), "summary": a.get("summary"), "ts": a["ts"], "url": a.get("url"),
+                           "category": cat, "category_label": C.LABELS.get(cat)},
+                "event": cat, "text": text[:300], "people": res["network"], "coverage": res["coverage"],
+                "web_query": {"org": org, "event": cat, "text": text[:300], "company": c["name"],
+                              "theme": themes[0] if (themes and not org) else None}}
+    return None
 
 
 def dossier(ticker: str, force: bool = False) -> dict[str, Any]:
@@ -164,6 +197,7 @@ def _build(t: str, key: str) -> dict[str, Any]:
         "bull_bear": _bull_bear(c, snap, traj, bs, cash, ledger),
         "latest_results": F.results_card(c),
         "people": people[:5], "themes": themes,
+        "cause": _cause(c, org, themes),
         "filings": filings,
         "documents": {"annual_reports": c.get("documents", {}).get("annual_reports", [])[:3],
                       "concalls": c.get("documents", {}).get("concalls", [])[:4]},

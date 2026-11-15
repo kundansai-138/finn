@@ -35,10 +35,31 @@ def run_refresh(**kw) -> dict | None:
             out["push"] = notify.dispatch()
         except Exception as e:  # notifications must never break ingestion
             log.warning("push dispatch failed: %s", e)
-        threading.Thread(target=prebuild_dossiers, daemon=True).start()
+        threading.Thread(target=_after_refresh, daemon=True).start()
         return out
     finally:
         _lock.release()
+
+
+def _after_refresh() -> None:
+    """Off the request path: web context for the new important filings (budgeted), the weekly
+    keep-in-touch push, then warm every dossier."""
+    from . import enrich
+    from .network import nudges
+
+    try:
+        b = push.brief("72h", "material")
+        _state["enrich"] = enrich.enrich_pending(b["items"])
+    except Exception as e:
+        log.warning("enrich failed: %s", e)
+    try:
+        age = db.kv_age("meta", "last_nudge_push")
+        if age is None or age > 6.5 * 86400:   # weekly, not every refresh
+            _state["nudges"] = nudges.dispatch()
+            db.kv_put("meta", "last_nudge_push", clock.now().isoformat())
+    except Exception as e:
+        log.warning("nudge push failed: %s", e)
+    prebuild_dossiers()
 
 
 def prebuild_dossiers() -> int:

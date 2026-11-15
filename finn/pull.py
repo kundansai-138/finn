@@ -202,7 +202,7 @@ def _build(t: str, key: str) -> dict[str, Any]:
         "documents": {"annual_reports": c.get("documents", {}).get("annual_reports", [])[:3],
                       "concalls": c.get("documents", {}).get("concalls", [])[:4]},
         "generated_at": clock.now().isoformat(),
-        "model": {"enabled": llm.enabled(), "fast": llm.MODEL_FAST, "deep": llm.MODEL_DEEP},
+        "model": {"enabled": llm.enabled(), **llm.models()},
     }
     db.kv_put("dossier", key, out)
     return out

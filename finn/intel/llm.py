@@ -187,6 +187,12 @@ def enabled() -> bool:
     return available()
 
 
+def models() -> dict[str, str | None]:
+    """The models this request would use (the visitor's choice, else the server's), for display."""
+    c = _creds()
+    return {"provider": c.provider if c else None, "fast": c.fast if c else None, "deep": c.deep if c else None}
+
+
 _clients: dict[str, Any] = {}
 
 

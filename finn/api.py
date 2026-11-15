@@ -393,7 +393,7 @@ def agent_info() -> dict[str, Any]:
     from .agent import core, memory, tools
 
     return {"graph": core.GRAPH.describe(), "tools": [{"name": t.name, "description": t.description} for t in tools.available()],
-            "facts": memory.facts(), "model": {"enabled": llm.enabled(), "agent": llm.MODEL_DEEP}}
+            "facts": memory.facts(), "model": {"enabled": llm.enabled(), "agent": llm.models()["deep"]}}
 
 
 @app.delete("/api/agent/memory/{fact_id}")

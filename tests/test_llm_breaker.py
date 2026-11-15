@@ -112,3 +112,19 @@ def test_headers_reach_the_request():
     r = c.get("/api/llm", headers={"X-FINN-Model-Key": "sk-test", "X-FINN-Model-Provider": "openai"}).json()
     assert r["source"] == "visitor" and r["web_search"] is False and any(p["id"] == "openrouter" for p in r["providers"])
     assert c.get("/api/llm").json()["source"] != "visitor"
+
+
+def test_pages_that_show_the_model_still_load():
+    """Regression: the company page and the chat thread report the model in use (500 after the refactor)."""
+    from fastapi.testclient import TestClient
+
+    from finn.api import app
+
+    c = TestClient(app)
+    r = c.get("/api/company/HDFCBANK")
+    assert r.status_code == 200 and "model" in r.json()
+    t = llm.use_key("AIzaTestKey123", "gemini", fast="g-fast", deep="g-deep")
+    try:
+        assert llm.models() == {"provider": "gemini", "fast": "g-fast", "deep": "g-deep"}
+    finally:
+        llm.reset_key(t)

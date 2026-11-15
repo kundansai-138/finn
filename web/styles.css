@@ -800,3 +800,13 @@ button:active, .list-row:active, .nrow:active, [role="link"]:active { transform:
 .nrow.upd.mv { box-shadow: inset 4px 0 0 color-mix(in oklab, var(--upd) 60%, var(--line-2)), var(--shadow); }
 .need-hook { background: var(--upd-soft); }
 @media (hover: hover) { .nrow.upd:hover { box-shadow: inset 4px 0 0 var(--upd), var(--lift); } }
+
+/* the visitor's own model key */
+.keyrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.keyrow .t { font-weight: 500; font-size: 14px; }
+.keyrow .s { font-size: 12.5px; color: var(--ink-3); }
+.keynow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; padding: 4px 4px 4px 12px;
+  border-radius: 10px; background: var(--pos-soft); color: var(--pos); font-size: 13px; font-weight: 500; }
+.keynow svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+.okmsg { padding: 12px 14px; border-radius: 12px; background: var(--pos-soft); color: var(--pos); font-size: 14px; }

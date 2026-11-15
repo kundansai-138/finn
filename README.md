@@ -30,6 +30,8 @@ The password is generated and written to `.env` (git-ignored) as `FINN_TEST_USER
 
 Phone alerts need HTTPS (browsers only allow push and service workers on a secure origin or `localhost`), so on a phone use the deployed app or an HTTPS tunnel to your machine. In production set `FINN_AUTH_STRICT=on`, so only a session cookie identifies a user.
 
+FINN is model-agnostic. On first open it asks for a model: pick a provider (Anthropic, Gemini, OpenAI, OpenRouter, Groq, DeepSeek, Mistral, Together, or any OpenAI-compatible endpoint), paste a key, and choose an everyday and a deep model from the ones that key can use. The key stays in the browser and travels with that visitor's requests only; the server never stores or logs it. Web lookups (news context, finding people online) need Anthropic or Gemini, which search server-side with citations; on other providers those features are skipped.
+
 Without a model key everything still runs, on deterministic fallbacks. With one, FINN extracts and verifies guidance from transcripts, writes one-line summaries, argues bull and bear, and Ask FINN writes grounded answers.
 
 ## Test it

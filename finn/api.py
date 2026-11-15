@@ -50,10 +50,14 @@ async def user_and_timing(request: Request, call_next):
     uid, how = auth.resolve(request.cookies.get(auth.COOKIE), request.headers.get("x-finn-user"))
     request.state.auth = how
     token = set_user(uid)
+    h = request.headers   # a visitor's own model config, this request only (never stored)
+    ktoken = llm.use_key(h.get("x-finn-model-key"), h.get("x-finn-model-provider"), h.get("x-finn-model-fast"),
+                         h.get("x-finn-model-deep"), h.get("x-finn-model-base"))
     t0 = time.perf_counter()
     try:
         resp = await call_next(request)
     finally:
+        llm.reset_key(ktoken)
         reset_user(token)
     ms = (time.perf_counter() - t0) * 1000
     route = getattr(request.scope.get("route"), "path", request.url.path)
@@ -101,6 +105,21 @@ def health() -> dict[str, Any]:
     return {"ok": True, "db": store.engine().dialect.name, "db_ms": round((time.perf_counter() - t0) * 1000, 1),
             "last_refresh_age_s": round(db.kv_age("meta", "last_refresh") or -1), "llm": llm.enabled(), "llm_status": llm.status(),
             "scheduler": scheduler.status()}
+
+
+@app.post("/api/llm/check")
+def llm_check(body: dict = Body(...)) -> dict[str, Any]:
+    """Check a key the visitor pasted (lists the provider's models; costs nothing). The key isn't stored."""
+    return llm.check_key(str(body.get("key", ""))[:400], body.get("provider"), body.get("base"))
+
+
+@app.get("/api/llm")
+def llm_info() -> dict[str, Any]:
+    """Whose key this request would use: the visitor's, the server's, or none (fallbacks)."""
+    from .intel import providers
+
+    return {"source": llm.source(), "status": llm.status(), "server_key": llm.LLM_ENABLED, "web_search": llm.web_search_available(),
+            "providers": providers.public()}
 
 
 @app.get("/api/metrics")

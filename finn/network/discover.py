@@ -430,7 +430,7 @@ def discover(org: str | None = None, event: str | None = None, text: str = "", t
     q = Query(org=org, theme=theme.lower() if theme else None, event=event, text=text or "")
     company = company or (net.org_name(org) if org else None)
     topics = cause_topics(q)
-    if not LLM_ENABLED:
+    if not (LLM_ENABLED or llm.web_search_available()):
         return {"status": "unavailable", "reason": "Web search needs a model key.", "candidates": [], "cached": False}
     key = cache_key(company, event, topics, text)
     hit = None if force else db.kv_get("discover", key, max_age=TTL)

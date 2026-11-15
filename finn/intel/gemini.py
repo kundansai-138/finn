@@ -38,6 +38,18 @@ class GeminiError(Exception):
         return self.status_code in (401, 403) or (self.status_code == 400 and ("api key" in m or "api_key" in m))
 
 
+def list_models(api_key: str) -> set[str]:
+    r = httpx.get("https://generativelanguage.googleapis.com/v1beta/models", params={"pageSize": 1000},
+                  headers={"x-goog-api-key": api_key}, timeout=15.0)
+    if r.status_code >= 400:
+        try:
+            msg = r.json().get("error", {}).get("message", r.text)
+        except ValueError:
+            msg = r.text
+        raise GeminiError(r.status_code, msg[:300])
+    return {m["name"].split("/", 1)[-1] for m in r.json().get("models", [])}
+
+
 def _text(content: Any) -> str:
     if isinstance(content, str):
         return content

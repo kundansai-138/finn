@@ -129,7 +129,7 @@ def understand(s: dict, emit) -> dict:
     theme = router._find_theme(q, net)
     followup = not (ticker or person or theme)
     standalone = q
-    if followup and LLM_ENABLED and t["messages"]:
+    if followup and (LLM_ENABLED or llm.enabled()) and t["messages"]:
         last = t["messages"][-2:]
         res = llm.complete(
             "rewrite_followup",
@@ -195,7 +195,7 @@ def _rule_plan(s: dict) -> list[dict]:
     steps: list[dict] = []
 
     def add(tool, **args):
-        if tool in tools.TOOLS and (not tools.TOOLS[tool].needs_model or LLM_ENABLED):
+        if tool in tools.TOOLS and (not tools.TOOLS[tool].needs_model or (LLM_ENABLED or llm.enabled())):
             steps.append({"tool": tool, "args": args, "why": ""})
 
     if s.get("person"):
@@ -257,7 +257,7 @@ def plan(s: dict, emit) -> dict:
     rule_steps = _rule_plan(s)
     if _rules_confident(s, rule_steps):
         steps = rule_steps
-    elif LLM_ENABLED:
+    elif (LLM_ENABLED or llm.enabled()):
         hist = "\n".join(f"{m['role']}: {memory._strip_cites(m['content'])[:300]}" for m in t["messages"][-4:])
         prompt = (f"Tools:\n{tools.catalog()}\n\nInvestor's standing preferences:\n{s.get('facts') or memory.facts_block()}\n\n"
                   f"Conversation summary: {t.get('summary') or '(new conversation)'}\nRecent turns:\n{hist or '(none)'}\n\n"
@@ -312,7 +312,7 @@ def execute(s: dict, emit) -> dict:
 
 def after_execute(s: dict) -> str:
     # Nothing found: one replan by the model (a rules-first plan that came back empty gets the model's try too).
-    if (not s.get("evidence") and s.get("replans", 0) < 1 and LLM_ENABLED
+    if (not s.get("evidence") and s.get("replans", 0) < 1 and (LLM_ENABLED or llm.enabled())
             and (s.get("plan_source") == "model" or (s.get("plan_source") == "rules" and s.get("plan")))):
         s["replans"] = s.get("replans", 0) + 1
         s["replan_note"] = "The previous plan returned no evidence. Try different tools or broader queries."
@@ -455,7 +455,7 @@ def answer(s: dict, emit) -> dict:
     out, mode = None, "extractive"
     if s.get("plan_source") == "declined":
         out, mode = _decline(s), "declined"
-    elif LLM_ENABLED and ev:
+    elif (LLM_ENABLED or llm.enabled()) and ev:
         t = s["thread"]
         system = ANSWER_SYSTEM + f"\n\nInvestor's standing preferences (tailor emphasis to these):\n{s.get('facts') or memory.facts_block()}"
         if t.get("summary"):
@@ -497,7 +497,7 @@ def verify_node(s: dict, emit) -> dict:
 
 def after_verify(s: dict) -> str:
     v = s["verification"]
-    if not v["ok"] and LLM_ENABLED and s.get("answer_mode") == "model" and s.get("repairs", 0) < 1:
+    if not v["ok"] and (LLM_ENABLED or llm.enabled()) and s.get("answer_mode") == "model" and s.get("repairs", 0) < 1:
         s["repairs"] = s.get("repairs", 0) + 1
         return "answer"
     return "remember"

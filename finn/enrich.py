@@ -245,7 +245,7 @@ def eligible(item: dict) -> bool:
 
 def enrich(item: dict, force: bool = False) -> dict[str, Any] | None:
     """Web context for one brief item, cached forever per filing."""
-    if not LLM_ENABLED:
+    if not (LLM_ENABLED or llm.web_search_available()):
         return None
     hit = None if force else db.kv_get("enrich", item["id"])
     if hit is not None and hit.get("v") != FORMAT:

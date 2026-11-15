@@ -243,7 +243,7 @@ def route_to_person(person: str, **_) -> list[Evidence]:
 
 def web_search(query: str, **_) -> list[Evidence]:
     """Server-side web search (runs on Anthropic's infrastructure). Secondary by definition."""
-    if not LLM_ENABLED:
+    if not (LLM_ENABLED or llm.web_search_available()):
         return []
     text, resp = llm.call(
         "web_search", model=MODEL_WEB, effort="low", max_tokens=1500,
@@ -318,7 +318,7 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
 
 
 def available() -> list[Tool]:
-    return [t for t in TOOLS.values() if LLM_ENABLED or not t.needs_model]
+    return [t for t in TOOLS.values() if (LLM_ENABLED or llm.enabled()) or not t.needs_model]
 
 
 def catalog() -> str:

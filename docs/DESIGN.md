@@ -195,6 +195,21 @@ FINN is a PWA, so it installs to the home screen and runs full-screen. The brief
 
 The mobile audit ([evals/mobile_audit.js](../evals/mobile_audit.js)) checks overflow, tap targets, text size and zoom-triggering inputs on every screen at 320/375/390/412px. All clean.
 
+### Screens: point at the next step, not at everything
+
+The first version showed every fact on every card (one CFO-change card carried a timeline, four routes and three footer links). The redesign keeps the same data, but every screen leads with one thing to look at and one action:
+
+| Tab | Leads with | Depth on tap |
+|---|---|---|
+| **Radar** (home) | Every holding as a tile sized by weight, ringed when it filed something that matters (dashed: moved with no filing). Below it, one row per flagged holding: what happened and the one person to call. | The holding |
+| **Holding** | Three panes, in the order an investor thinks: *Updates* (the latest material filing and "your best move"), *Condition* (three things to know, four numbers, a question worth asking), *Network* (who can explain it, each with a Draft button) | Promises, growth, cash and bull/bear fold away |
+| **Research** | One box for a ticker or a question, then the research list and recent names | Dossier or Ask FINN |
+| **People** | A to-do list, verb first ("Ask Ananya to introduce you to Siddharth Kapadia"): news-driven calls, then keep-in-touch nudges, one row per person. Then the network as an orbit (closer = warmer), then a searchable directory | Profile sheet |
+
+**Message drafter** ([finn/network/drafter.py](../finn/network/drafter.py)): pick what you want (intro, their view, catch up, introduce yourself) and the channel (WhatsApp, email, LinkedIn's 300-character note). The draft uses only facts FINN can show, and lists them under the text ("How you know Ananya…", "Last spoke 3 months ago"). With a model key, the fast model writes it from those facts and never sees a real name; without one, templates. FINN never sends: it copies the text or opens the investor's own app, then offers to log the contact.
+
+**Colour has one job each.** Greys for everything; amber only for "this needs you" (rings, the best move, the one primary button per screen); green and red only on numbers; simulated data is a dashed outline, never a colour. Dark ("night desk") is the home palette, and light mode keeps the same roles.
+
 ## 7. Deployment
 
 - **Image:** a Docker image ([Dockerfile](../Dockerfile)). It runs as a non-root user, with two uvicorn workers by default. **Exactly one process runs the scheduler**, elected with a Postgres advisory lock; the rest only serve requests, and if the leader dies another takes over. This was verified with two containers sharing one database.

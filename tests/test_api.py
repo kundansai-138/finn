@@ -83,6 +83,49 @@ def test_push_key_is_a_p256_point(client):
     assert len(raw) == 65 and raw[0] == 4   # uncompressed EC point, as browsers require
 
 
+def test_radar_home_screen(client):
+    """Every holding is a tile; only the flagged ones become rows, each with one person attached."""
+    r = client.get("/api/radar?window=24h").json()
+    assert len(r["tiles"]) == len(client.get("/api/portfolio").json()["holdings"])
+    needs = {n["ticker"]: n for n in r["needs"]}
+    assert {t["ticker"] for t in r["tiles"] if t["status"]} == set(needs)       # map and list agree
+    assert [n["score"] for n in r["needs"]] == sorted((n["score"] for n in r["needs"]), reverse=True)
+    cfo = needs["DEEPAKNTR"]
+    assert cfo["kind"] == "filing" and cfo["hook"]["intent"] == "intro"
+    assert cfo["hook"]["person"]["name"] == "Ananya Rao" and cfo["hook"]["target"]["name"] == "Siddharth Kapadia"
+    assert needs["DIXON"]["move"]["volume_x"] >= 2                               # the synthetic 3x-volume day
+    assert r["headline"].startswith(f"{len(needs)} of {len(r['tiles'])}")
+    assert client.get("/api/radar?window=1y").status_code == 422
+
+
+def test_people_todo_news_first_one_row_per_person(client):
+    items = client.get("/api/people/todo").json()["items"]
+    assert items and items[0]["kind"] == "news"
+    kinds = [x["kind"] for x in items]
+    assert kinds == sorted(kinds, key=lambda k: k != "news")
+    assert len({x["person"]["id"] for x in items}) == len(items)
+    ananya = next(x for x in items if x["person"]["id"] == "ananya")
+    assert ananya["intent"] == "intro" and ananya["title"].startswith("Ask Ananya to introduce you")
+    # Done clears the row (without touching the contact, which other tests rely on)
+    client.post("/api/people/todo/done", json={"id": ananya["id"], "person_id": None})
+    assert ananya["id"] not in [x["id"] for x in client.get("/api/people/todo").json()["items"]]
+    client.post("/api/brief/dismiss", json={"id": ananya["id"], "undo": True})
+
+
+def test_drafter_grounded_and_channel_aware(client):
+    cfo = next(n for n in client.get("/api/radar").json()["needs"] if n["ticker"] == "DEEPAKNTR")
+    body = {"person_id": "ananya", "intent": "intro", "event_id": cfo["event_id"], "target_id": cfo["hook"]["target"]["id"]}
+    wa = client.post("/api/draft", json={**body, "channel": "whatsapp"}).json()
+    assert wa["source"] == "template" and wa["intent"] == "intro"            # model is off in tests
+    assert wa["text"].startswith("Hi Ananya, ") and "Siddharth" in wa["text"]
+    assert any(g.startswith("How you know Ananya") for g in wa["grounds"])    # the draft says what it rests on
+    assert {i["id"] for i in wa["intents"]} == {"intro", "view", "catchup"}
+    assert len(client.post("/api/draft", json={**body, "channel": "linkedin"}).json()["text"]) <= 300
+    em = client.post("/api/draft", json={"person_id": "meera", "intent": "view", "channel": "email", "ticker": "PIIND"}).json()
+    assert em["subject"] and em["text"].startswith("Hi Meera,\n\n")
+    assert client.post("/api/draft", json={"person_id": "nobody"}).status_code == 404
+
+
 @pytest.mark.perf
 def test_latency_budgets(client):
     """Regression guard, not a benchmark: warm p95 must stay inside the budget."""

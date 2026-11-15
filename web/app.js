@@ -30,12 +30,22 @@ const ago = (iso) => {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 };
 const go = (path) => { location.hash = path; };
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const first = (name) => (name || "").split(" ")[0];
 const strengthBars = (s) => (s >= 0.6 ? 3 : s >= 0.35 ? 2 : 1);
+// Sheets any screen can open (set by App on every render), so deep components needn't thread callbacks.
+const ui = { openPerson: () => {}, openDraft: () => {} };
 
+const svg = (body, w = 1.7) => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width=${w} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const Icon = {
-  brief: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16M4 12h10M4 18h7"/></svg>`,
-  portfolio: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17l5-6 4 3 6-8 3 4"/><path d="M3 21h18"/></svg>`,
-  network: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="17" r="2.5"/><path d="M8 8.5l2.6 6.4M16.2 7.9l-2.8 7M8.4 7l7.1-.6"/></svg>`,
+  radar: svg(html`<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l5.5-5.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>`),
+  research: svg(html`<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>`),
+  search: svg(html`<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>`),
+  people: svg(html`<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.8-3.2 3-5 5.5-5s4.7 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.8 14.6c2.2.3 3.8 1.9 4.4 4.9"/>`),
+  chev: svg(html`<path d="M9 6l6 6-6 6"/>`, 2),
+  ask: svg(html`<path d="M4.5 5.5h15v10h-9l-4.5 4v-4h-1.5z"/><path d="M8.5 10.5h7"/>`),
+  draft: svg(html`<path d="M4 20h4L19.5 8.5l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>`),
+  copy: svg(html`<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V5.5a1 1 0 00-1-1h-9a1 1 0 00-1 1v9a1 1 0 001 1h3"/>`),
   arrow: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h13M13 6l6 6-6 6"/></svg>`,
   back: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5l-7 7 7 7"/></svg>`,
   sliders: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>`,
@@ -96,11 +106,11 @@ function BarLine({ labels, bars, line, barLabel = "Revenue", lineLabel = "Margin
         const bh = (b / bmax) * (h - 34);
         return html`<rect x=${x(i)} y=${h - 18 - bh} width=${bw} height=${Math.max(bh, 1)} rx="2" fill=${i === n - 1 ? "var(--ink)" : "var(--line-2)"} />`;
       })}
-      ${path && html`<path d=${path} fill="none" stroke="var(--accent)" stroke-width="1.6" />`}
-      ${pts.map((p, i) => p && (i === pts.length - 1 || i === 0) && html`<text x=${p[0]} y=${p[1] - 5} text-anchor="middle" style="fill:var(--accent)">${line[i].toFixed(1)}</text>`)}
+      ${path && html`<path d=${path} fill="none" stroke="var(--ink-2)" stroke-width="1.6" />`}
+      ${pts.map((p, i) => p && (i === pts.length - 1 || i === 0) && html`<text x=${p[0]} y=${p[1] - 5} text-anchor="middle" style="fill:var(--ink-2)">${line[i].toFixed(1)}</text>`)}
       ${labels.map((l, i) => (i % Math.ceil(n / (W < 330 ? 4 : 6)) === 0 || i === n - 1) && html`<text x=${x(i) + bw / 2} y=${h - 5} text-anchor="middle">${shortPeriod(l)}</text>`)}
     </svg>
-    <div class="legend"><span><i style="background:var(--line-2)"></i>${barLabel}</span>${line && html`<span><i style="background:var(--accent)"></i>${lineLabel}</span>`}</div>
+    <div class="legend"><span><i style="background:var(--line-2)"></i>${barLabel}</span>${line && html`<span><i style="background:var(--ink-2)"></i>${lineLabel}</span>`}</div>
   </div>`;
 }
 const shortPeriod = (p) => (p || "").replace(/^(\w{3}) (\d{2})(\d{2})$/, "$1 '$3").replace(/^Mar '(\d{2})$/, "FY$1");
@@ -164,33 +174,85 @@ function PathView({ path, target, onPerson }) {
   </div>`;
 }
 
-function PeopleList({ people, onPerson, compact }) {
+function PeopleList({ people, onPerson, compact, draft }) {
   if (!people?.length) return html`<p class="small muted">No one in your network is close to this yet.</p>`;
-  return html`<div class="stack">${people.map((x) => html`<${RecRow} key=${x.person.id} x=${x} onPerson=${onPerson} compact=${compact} />`)}</div>`;
+  return html`<div class="stack">${people.map((x) => html`<${RecRow} key=${x.person.id} x=${x} onPerson=${onPerson} compact=${compact} draft=${draft} />`)}</div>`;
 }
 
 // ---------------------------------------------------------------------------
-// Brief (Push)
+// Radar (home): the portfolio as a map, and the few holdings that need a look
 // ---------------------------------------------------------------------------
-const LEVELS = [["critical", "Critical"], ["material", "Material"], ["all", "Everything"]];
-const WINDOWS = ["24h", "3d", "7d", "30d"];
+const WINDOWS = ["24h", "3d", "7d"];
+let radarCache = null;   // the holding page reads the radar's verdict for its ticker without a second fetch
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-function Dial({ level, setLevel }) {
-  const idx = LEVELS.findIndex((l) => l[0] === level);
-  return html`<div class="dial" role="radiogroup" aria-label="Signal level">
-    <div class="dial-track">
-      <div class="dial-fill" style=${`width:${idx * 50}px`}></div>
-      ${LEVELS.map((l, i) => html`<button class="dial-stop ${i === idx ? "on" : i < idx ? "lit" : ""}" style=${`left:${i * 50}px`}
-        role="radio" aria-checked=${i === idx} title=${l[1]} onClick=${() => setLevel(l[0])}><i></i></button>`)}
-    </div>
-    <span class="dial-label">${LEVELS[idx][1]}</span>
+// Squarified treemap (Bruls et al.): tiles close to square, so a 3% holding is still tappable.
+function squarify(items, W, H) {
+  const total = items.reduce((s, i) => s + i.value, 0) || 1;
+  const nodes = items.map((i) => ({ ...i, area: (i.value / total) * W * H }));
+  const out = [];
+  let rect = { x: 0, y: 0, w: W, h: H }, row = [];
+  const worst = (r, side) => {
+    const s = r.reduce((a, n) => a + n.area, 0), mx = Math.max(...r.map((n) => n.area)), mn = Math.min(...r.map((n) => n.area));
+    return Math.max((side * side * mx) / (s * s), (s * s) / (side * side * mn));
+  };
+  const place = (r) => {
+    const s = r.reduce((a, n) => a + n.area, 0);
+    if (rect.w >= rect.h) {
+      const cw = s / rect.h; let y = rect.y;
+      r.forEach((n) => { const h = n.area / cw; out.push({ ...n, x: rect.x, y, w: cw, h }); y += h; });
+      rect = { x: rect.x + cw, y: rect.y, w: rect.w - cw, h: rect.h };
+    } else {
+      const rh = s / rect.w; let x = rect.x;
+      r.forEach((n) => { const w = n.area / rh; out.push({ ...n, x, y: rect.y, w, h: rh }); x += w; });
+      rect = { x: rect.x, y: rect.y + rh, w: rect.w, h: rect.h - rh };
+    }
+  };
+  for (let i = 0; i < nodes.length;) {
+    const side = Math.min(rect.w, rect.h);
+    if (!row.length || worst([...row, nodes[i]], side) <= worst(row, side)) { row.push(nodes[i]); i++; }
+    else { place(row); row = []; }
+  }
+  if (row.length) place(row);
+  return out;
+}
+
+function Treemap({ tiles }) {
+  const [ref, W] = useWidth(343);
+  const H = Math.round(Math.min(340, W * 0.82));
+  const nodes = useMemo(() => squarify(tiles.filter((t) => t.weight > 0).sort((a, b) => b.weight - a.weight).map((t) => ({ ...t, value: t.weight })), W, H), [tiles, W, H]);
+  return html`<div ref=${ref} class="tmap" style=${`height:${H}px`} role="list" aria-label="Your holdings, sized by weight">
+    ${nodes.map((n) => {
+      const c = n.change_pct || 0, mix = c ? Math.min(42, Math.abs(c) * 15) + 6 : 0;
+      const bg = `color-mix(in oklab, var(${c >= 0 ? "--pos" : "--neg"}) ${mix}%, var(--surface))`;
+      return html`<button role="listitem" class="tile ${n.status || ""}" style=${`left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px;background:${bg}`}
+        aria-label=${`${n.name}, ${sgn(c, 1)}${n.status ? ", needs a look" : ""}`} onClick=${() => go(`/c/${n.ticker}`)}>
+        <span class="tt">${n.ticker}</span>${n.h >= 38 && html`<span class="tc">${sgn(c, 1)}</span>`}
+      </button>`;
+    })}
   </div>`;
 }
 
-function BriefView({ openPerson, openRules, rulesVersion }) {
-  const [win, setWin] = useState(() => { try { return localStorage.getItem("finn.win") || "24h"; } catch { return "24h"; } });
-  const [level, setLevel] = useState(() => { try { return localStorage.getItem("finn.level") || "material"; } catch { return "material"; } });
-  const [data, setData] = useState(null);
+function NeedRow({ n }) {
+  const open = () => go(`/c/${n.ticker}`);
+  return html`<div class="nrow" role="link" tabindex="0" onClick=${open} onKeyDown=${(e) => e.key === "Enter" && open()}>
+    <div class="need-meta"><span class="tick">${n.ticker}</span><span>${n.label}</span><span>·</span><span>${ago(n.ts)}</span>${n.simulated && html`<span class="badge sim">Simulated</span>`}</div>
+    <div class="need-title">${n.company}: ${n.title}</div>
+    ${n.hook ? html`<div class="need-hook"><${Avatar} p=${n.hook.person} cls="sm" /><span>${n.hook.text}</span></div>`
+      : n.move ? html`<div class="need-hook"><b class="delta ${tone(n.move.change_pct)}">${sgn(n.move.change_pct, 1)}</b><span>${n.move.volume_x?.toFixed(1)}× volume · ${n.line}</span></div>` : ""}
+    <span class="need-chev" aria-hidden="true">${Icon.chev}</span>
+  </div>`;
+}
+
+function Swipeable({ onSwipe, children }) {
+  const ref = useSwipe(onSwipe);
+  return html`<div class="swipe-wrap"><div class="swipe-under" aria-hidden="true"><span>Handled ✓</span><span>Handled ✓</span></div><div ref=${ref} class="swipe">${children}</div></div>`;
+}
+
+function RadarView({ openRules, rulesVersion }) {
+  const [win, setWin] = useState(() => (WINDOWS.includes(lsGet("finn.win")) ? lsGet("finn.win") : "24h"));
+  const [d, setD] = useState(() => (radarCache?.window === win ? radarCache : null));
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -200,253 +262,220 @@ function BriefView({ openPerson, openRules, rulesVersion }) {
   const load = useCallback(async () => {
     setErr(null);
     try {
-      const r = await fetch(`/api/brief?window=${win}&level=${level}`);
-      if (!r.ok) throw new Error(r.status === 503 ? "You're offline and there's no saved brief yet." : `${r.status}`);
+      const r = await fetch(`/api/radar?window=${win}`);
+      if (!r.ok) throw new Error(r.status === 503 ? "You're offline and there's no saved radar yet." : `${r.status}`);
       setOffline(r.headers.get("X-FINN-Offline") === "1");
-      setData(await r.json());
+      const j = await r.json();
+      radarCache = j; setD(j);
     } catch (e) { setErr(e.message); }
-  }, [win, level]);
-  useEffect(() => { try { localStorage.setItem("finn.win", win); localStorage.setItem("finn.level", level); } catch {} load(); }, [win, level, rulesVersion]);
+  }, [win]);
+  useEffect(() => { lsSet("finn.win", win); load(); }, [win, rulesVersion]);
   const { pull, busy: pulling } = usePullToRefresh(load);
-  const refresh = async () => { setBusy(true); try { await api("/api/refresh", { method: "POST" }); await load(); } finally { setBusy(false); } };
-
-  // Swipe a card away = "handled". Saved server-side (every device agrees); undo for 5 seconds.
-  const handle = useCallback(async (item) => {
-    setData((d) => ({ ...d, items: d.items.filter((x) => x.id !== item.id), alerts: d.alerts.filter((x) => x.id !== item.id),
-                      counts: { ...d.counts, done: (d.counts.done || 0) + 1 } }));
-    setToast({ item, t: Date.now() });
-    try { await api("/api/brief/dismiss", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }) }); } catch {}
-    load();  // headline and counts come from the server ("2 things left")
+  const refresh = async () => { setBusy(true); try { await api("/api/refresh", { method: "POST" }); await load(); } catch {} finally { setBusy(false); } };
+  // Swipe a holding away = "handled": every filing behind it is marked, on every device; undo for 5 seconds.
+  const handle = useCallback(async (n) => {
+    setD((x) => ({ ...x, needs: x.needs.filter((y) => y.ticker !== n.ticker) }));
+    setToast(n);
+    await Promise.all(n.ids.map((id) => post("/api/brief/dismiss", { id }).catch(() => {})));
+    load();
   }, [load]);
   const undo = async () => {
-    const it = toast?.item;
-    setToast(null);
-    if (!it) return;
-    await api("/api/brief/dismiss", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: it.id, undo: true }) });
+    const n = toast; setToast(null);
+    if (!n) return;
+    await Promise.all(n.ids.map((id) => post("/api/brief/dismiss", { id, undo: true }).catch(() => {})));
     load();
   };
   useEffect(() => { if (!toast) return; const k = setTimeout(() => setToast(null), 5000); return () => clearTimeout(k); }, [toast]);
-
   const today = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
-  const left = data ? data.items.length + data.alerts.length : 0;
-  const asOf = data?.as_of ? new Date(data.as_of).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
+  const asOf = d?.as_of ? new Date(d.as_of).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
   return html`<div>
     <div class="ptr" style=${`height:${pull}px`}><span class=${pulling ? "spin-icon" : ""} style=${`opacity:${Math.min(1, pull / 64)};transform:rotate(${pull * 3}deg)`}>${Icon.refresh}</span></div>
     <div class="topbar">
       <div class="wordmark">FINN <small>${today}</small></div>
       <div style="display:flex;gap:2px">
-        <button class="iconbtn" aria-label="Refresh sources" title="Refresh sources" onClick=${refresh} style=${busy ? "animation:spin 1s linear infinite" : ""}>${Icon.refresh}</button>
-        <button class="iconbtn" aria-label="Alert rules and notifications" title="Alert rules" onClick=${openRules}>${Icon.sliders}</button>
+        <button class="iconbtn" aria-label="Refresh sources" onClick=${refresh} style=${busy ? "animation:spin 1s linear infinite" : ""}>${Icon.refresh}</button>
+        <button class="iconbtn" aria-label="Alert rules and notifications" onClick=${openRules}>${Icon.sliders}</button>
       </div>
     </div>
-    ${(!online || offline) && html`<div class="offline">Offline · showing your last brief${asOf ? ` from ${asOf}` : ""}</div>`}
+    ${(!online || offline) && html`<div class="offline">Offline · showing your last radar${asOf ? ` from ${asOf}` : ""}</div>`}
     ${inst.canPrompt && html`<button class="installbar" onClick=${inst.install}><img src="/static/icons/icon-192.png" alt="" /><span><b>Install FINN</b><br /><span class="tiny">One tap from your home screen, alerts on your lock screen</span></span></button>`}
     ${inst.iosHint && html`<div class="installbar ios"><img src="/static/icons/icon-192.png" alt="" /><span><b>Add FINN to your Home Screen</b><br /><span class="tiny">Tap Share, then “Add to Home Screen”, to get alerts on iPhone</span></span><button class="linkish tiny" onClick=${(e) => { inst.hideHint(); e.currentTarget.parentElement.remove(); }}>Not now</button></div>`}
-    ${err && html`<div class="err">Couldn't load the brief: ${err}</div>`}
-    ${!data && !err && html`<div class="section"><div class="skeleton" style="height:70px;background:none;border:0;box-shadow:none"></div><div class="skeleton"></div><div class="skeleton"></div></div>`}
-    ${data && html`<div>
+    ${err && html`<div class="err">Couldn't load the radar: ${err}</div>`}
+    ${!d && !err && html`<div class="section"><div class="skeleton" style="height:60px;background:none;border:0;box-shadow:none"></div><div class="skeleton" style="height:280px"></div></div>`}
+    ${d && html`<div>
       <div class="hero">
-        <h1>${data.headline.split(". ")[0]}.</h1>
-        <p>${data.headline.split(". ").slice(1).join(". ")}</p>
+        <h1>${d.headline}</h1>
+        <p>${d.sub}</p>
       </div>
-      <div class="controls">
-        <div class="seg" role="tablist" aria-label="Time window">${WINDOWS.map((w) => html`<button role="tab" aria-selected=${w === win} class=${w === win ? "on" : ""} onClick=${() => setWin(w)}>${w}</button>`)}</div>
-        <${Dial} level=${level} setLevel=${setLevel} />
+      <div class="section" style="padding-top:0">
+        <div class="row" style="align-items:center;margin-bottom:6px">
+          <div class="seg" role="tablist" aria-label="Time window">${WINDOWS.map((w) => html`<button role="tab" aria-selected=${w === win} class=${w === win ? "on" : ""} onClick=${() => setWin(w)}>${w}</button>`)}</div>
+          <span class="tiny muted">tap a tile to open it</span>
+        </div>
+        <${Treemap} tiles=${d.tiles} />
+        <div class="legend2"><span><i class="lg-filing"></i>filed something that matters</span><span><i class="lg-move"></i>moved, no filing</span><span>size = weight</span></div>
       </div>
-
-      ${data.alerts.length > 0 && html`<div class="section">
-        <div class="section-h"><h2>Moved</h2><span class="tiny muted">End of day ${data.eod_date ? new Date(data.eod_date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }) : ""}</span></div>
-        ${data.alerts.map((a) => html`<${Swipeable} key=${a.id} onSwipe=${() => handle(a)}><div class="alert-row" onClick=${() => go(`/c/${a.ticker}`)}>
-          <${Spark} data=${a.metrics.spark} />
-          <div><div class="t">${a.company} <span class="tick">${a.ticker}</span></div>
-            <div class="s">${a.unexplained ? html`<span class="badge warn">No filing explains this</span>` : html`Likely: ${a.explained_by}`}</div></div>
-          <div class="chg"><div class=${tone(a.metrics.change_pct)}>${sgn(a.metrics.change_pct, 1)}</div>
-            <div class="tiny muted">vol ${a.metrics.volume_x?.toFixed(1)}×<span class="volbar"><i style=${`width:${Math.min(100, (a.metrics.volume_x / 4) * 100)}%`}></i></span></div></div>
-        </div><//>`)}
+      ${d.needs.length > 0 && html`<div class="section">
+        <div class="section-h"><h2>Needs a look</h2><span class="tiny muted">swipe when handled</span></div>
+        ${d.needs.map((n) => html`<${Swipeable} key=${n.ticker} onSwipe=${() => handle(n)}><${NeedRow} n=${n} /><//>`)}
       </div>`}
-
       <div class="section">
-        ${data.items.length > 0 && html`<div class="section-h"><h2>What matters</h2><span class="tiny muted">swipe when handled</span></div>`}
-        ${data.items.map((i) => html`<${Swipeable} key=${i.id} onSwipe=${() => handle(i)}><${ItemCard} i=${i} openPerson=${openPerson} /><//>`)}
-        ${data.counts.hidden_material > 0 && html`<button class="fold" style="width:100%;text-align:left" onClick=${() => setLevel("material")}>
-          ${data.counts.hidden_material} material item${data.counts.hidden_material > 1 ? "s" : ""} below your dial. <span class="linkish">Show material</span></button>`}
-        <${RoutineFold} r=${data.routine} count=${data.counts.routine} level=${level} setLevel=${setLevel} />
+        <div class="quiet">${d.quiet.count} holding${d.quiet.count === 1 ? "" : "s"} quiet${d.quiet.routine ? `, ${d.quiet.routine} routine filing${d.quiet.routine > 1 ? "s" : ""} folded away` : ""}.
+          ${d.quiet.biggest && html` Biggest quiet move: <button class="linkish" onClick=${() => go(`/c/${d.quiet.biggest.ticker}`)}>${d.quiet.biggest.name} <span class="delta ${tone(d.quiet.biggest.change_pct)}">${sgn(d.quiet.biggest.change_pct, 1)}</span></button>.`}</div>
+        <div class="caughtup">${d.filings} filing${d.filings === 1 ? "" : "s"} read for you${d.done ? ` · ${d.done} handled` : ""}${d.last_refresh?.at ? ` · sources refreshed ${ago(d.last_refresh.at)}` : ""}</div>
       </div>
-
-      ${data.nudges?.length > 0 && html`<div class="section">
-        <div class="section-h"><h2>Keep in touch</h2><button class="linkish small" onClick=${() => go("/network")}>All</button></div>
-        <div class="card" style="padding:2px 14px">${data.nudges.map((n) => html`<div class="nudge" style="cursor:pointer" onClick=${() => openPerson(n.person.id)}>
-          <div class="person"><${Avatar} p=${n.person} /><div style="flex:1;min-width:0"><div class="pname">${n.person.name} <${Warmth} w=${n.warmth} /></div>
-            <div class="small ink2">${n.reason}</div></div></div></div>`)}</div>
-      </div>`}
-
-      ${!data.nudges?.length && data.reconnect.length > 0 && html`<div class="section">
-        <div class="section-h"><h2>Natural reasons to reconnect</h2></div>
-        ${data.reconnect.map((r) => html`<div class="card" style="padding:12px">
-          <div class="person" style="cursor:pointer" onClick=${() => openPerson(r.person.id, r)}>
-            <${Avatar} p=${r.person} />
-            <div style="flex:1"><div class="pname">${r.person.name} <${Warmth} w=${r.warmth} /></div>
-              <div class="phead">${r.org} (${r.relation}) filed <b>${r.event.title}</b></div></div>
-          </div>
-        </div>`)}
-      </div>`}
-
-      <div class="caughtup"><span class="serif">${left ? "That's everything that matters." : "You're caught up."}</span>
-        ${data.counts.filings} filings read for you${data.counts.done ? ` · ${data.counts.done} handled` : ""}${data.last_refresh?.at ? ` · sources refreshed ${ago(data.last_refresh.at)}` : ""}</div>
     </div>`}
-    ${toast && html`<div class="toast" role="status"><span>Handled: ${toast.item.company}</span><button onClick=${undo}>Undo</button></div>`}
+    ${toast && html`<div class="toast" role="status"><span>Handled: ${toast.company}</span><button onClick=${undo}>Undo</button></div>`}
   </div>`;
 }
-
-function Swipeable({ onSwipe, children }) {
-  const ref = useSwipe(onSwipe);
-  return html`<div class="swipe-wrap"><div class="swipe-under" aria-hidden="true"><span>Handled ✓</span><span>Handled ✓</span></div><div ref=${ref} class="swipe">${children}</div></div>`;
-}
-
-function RoutineFold({ r, count, level, setLevel }) {
-  const [open, setOpen] = useState(false);
-  if (!count) return null;
-  return html`<div class="fold">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <span><b>${count}</b> routine filing${count > 1 ? "s" : ""} folded away</span>
-      <button class="linkish small" onClick=${() => (level === "all" ? setOpen(!open) : (setLevel("all"), setOpen(true)))}>${open && level === "all" ? "Hide" : "Show"}</button>
-    </div>
-    <div class="chips">${r.groups.map(([g, n]) => html`<span class="chip">${g}<b>${n}</b></span>`)}</div>
-    ${open && level === "all" && html`<div style="margin-top:10px">${r.items.map((x) => html`<div class="rline">
-      <span class="tick link" onClick=${() => go(`/c/${x.ticker}`)}>${x.ticker}</span>
-      <div><div>${x.title}</div>${x.one_liner && html`<div class="small muted">${x.one_liner}</div>`}</div>
-    </div>`)}</div>`}
-  </div>`;
-}
-
-function ItemCard({ i, openPerson }) {
-  const [why, setWhy] = useState(false);
-  const [graph, setGraph] = useState(false);
-  return html`<article class="card ${i.tier}">
-    <div class="meta">
-      <span class="dot ${i.tier}"></span>
-      <span class="tick link" onClick=${() => go(`/c/${i.ticker}`)}>${i.ticker}</span>
-      <span>${i.category_label}</span><span>·</span><span>${ago(i.ts)}</span>
-      ${i.alert && html`<span class="badge alert">Alert</span>`}
-      ${i.simulated && html`<span class="badge sim" title="Injected demo scenario, not a real filing">Simulated</span>`}
-    </div>
-    <h3>${i.company}: ${i.title}</h3>
-    ${i.one_liner && !i.results && html`<p class="one">${i.one_liner}</p>`}
-
-    ${i.results && html`<${ResultsGrid} r=${i.results} />`}
-
-    ${i.person && html`<div class="callout">
-      <span class="upper">Who's coming in</span>
-      <div class="person" style="cursor:pointer" onClick=${() => openPerson(i.person.id)}>
-        <${Avatar} p=${i.person} cls="lg target" />
-        <div><div class="pname" style="font-size:15px">${i.person.name}</div><div class="phead">${i.person.headline}</div>
-          ${i.person.credentials?.length > 0 && html`<div class="phead">${i.person.credentials.join(" · ")}</div>`}</div>
-      </div>
-      <${Timeline} roles=${i.person.roles} highlightOrgs=${(i.paths || []).flatMap((p) => p.orgs || [])} />
-      <div class="tiny muted" style="margin-top:2px"><span style="display:inline-block;width:10px;height:6px;border-radius:2px;background:var(--accent);vertical-align:middle"></span> where your network overlapped with him</div>
-      ${i.paths?.length > 0 && html`<div style="margin-top:12px"><span class="upper">Your way in</span>
-        <${PathView} path=${i.paths.find((p) => p.via) || i.paths[0]} target=${i.person} onPerson=${openPerson} />
-        ${i.paths.filter((p) => p.via).slice(1).map((p) => html`<div class="small ink2" style="margin-top:4px">Also: <b>${p.via.name}</b>: ${p.why[0]}</div>`)}
-        ${i.paths.filter((p) => !p.via).map((p) => html`<div class="banner info" style="margin-top:10px"><b>You've crossed paths before.</b> ${p.why[0]}</div>`)}
-      </div>`}
-    </div>`}
-
-    ${i.best_call && html`<div class="callout">
-      <span class="upper">Best person to call</span>
-      <div class="person" style="cursor:pointer" onClick=${() => openPerson(i.best_call.person.id, { event: i })}>
-        <${Avatar} p=${i.best_call.person} />
-        <div style="flex:1"><div style="display:flex;justify-content:space-between;gap:6px"><span class="pname">${i.best_call.person.name}</span><${Warmth} w=${i.best_call.warmth} /></div>
-          <div class="phead">${i.best_call.person.headline}</div></div>
-      </div>
-      <p class="because">${i.best_call.because}</p>
-      <button class="linkish tiny tap" onClick=${() => setGraph(!graph)}>${graph ? "Hide" : "Why this person?"} · ${Math.round(i.best_call.score * 100)}% match</button>
-      ${graph && html`<${WhyPerson} rec=${i.best_call} />`}
-    </div>`}
-
-    ${!i.best_call && !i.person && i.people?.length > 0 && html`<div class="callout"><span class="upper">Close to this</span>
-      <${PeopleList} people=${i.people} onPerson=${openPerson} compact /></div>`}
-
-    <${WebContext} i=${i} openPerson=${openPerson} />
-
-    ${why && html`<div class="why"><ul>${i.why_ranked.map((w) => html`<li>${w}</li>`)}</ul></div>`}
-    <div class="card-foot">
-      <button class="linkish" onClick=${() => setWhy(!why)}>${why ? "Hide" : "Why"} ranked ${Math.round(i.score)}</button>
-      <button class="askbtn" onClick=${() => go(`/chat?t=${i.ticker}&title=${encodeURIComponent(`${i.company}: ${i.title}`)}`)}>Ask FINN</button>
-      <span>${i.related?.length ? `+${i.related.length} related · ` : ""}${i.url ? html`<a href=${i.url} target="_blank" rel="noopener">Filing ↗</a>` : html`<span>no source (simulated)</span>`}</span>
-    </div>
-  </article>`;
-}
-
 // ---------------------------------------------------------------------------
-// Dossier (Pull)
+// Holding (Pull): updates, condition, network
 // ---------------------------------------------------------------------------
 const VERDICT = { delivered: "Delivered", missed: "Missed", partly: "Partly", on_track: "On track", behind: "Behind", pending: "Pending", unverifiable: "Can't check", mention: "Unverified" };
 
-function DossierView({ ticker, openPerson }) {
+// Holding: open a tile and see, in this order, what changed, how the company is doing, and who can help.
+function Fold({ title, hint, children, open: initial = false }) {
+  const [open, setOpen] = useState(initial);
+  return html`<div class="fold2 ${open ? "open" : ""}">
+    <button class="fold2-h" aria-expanded=${open} onClick=${() => setOpen(!open)}><span>${title}</span><span class="tiny muted">${hint || ""} <i class="chev">${Icon.chev}</i></span></button>
+    ${open && html`<div class="fold2-b">${children}</div>`}
+  </div>`;
+}
+
+// The three things worth knowing first: the best computed positive, then the sharpest worries.
+function thingsToKnow(d) {
+  const seen = new Set(), pos = [], other = [];
+  const add = (text, t) => { if (!text || seen.has(text)) return; seen.add(text); (t === "pos" ? pos : other).push({ text, tone: t || "neg" }); };
+  (d.bull_bear?.bull || []).forEach((b) => add(b.point, "pos"));
+  [...(d.trajectory?.flags || []), ...(d.cash?.flags || []), ...(d.balance_sheet?.flags || [])].forEach((f) => add(f.text, f.tone));
+  const out = [...pos.slice(0, 1), ...other.filter((x) => x.tone === "neg").slice(0, 2)];
+  for (const x of [...other, ...pos]) { if (out.length >= 3) break; if (!out.includes(x)) out.push(x); }
+  return out.slice(0, 3);
+}
+
+function remember(t) {
+  try { const r = JSON.parse(localStorage.getItem("finn.recent") || "[]").filter((x) => x !== t); r.unshift(t); localStorage.setItem("finn.recent", JSON.stringify(r.slice(0, 6))); } catch {}
+}
+
+function HookCard({ hook, ticker, eventId }) {
+  if (!hook) return null;
+  return html`<div class="hook">
+    <span class="upper">Your best move</span>
+    <div class="person" onClick=${() => ui.openPerson(hook.person.id)}><${Avatar} p=${hook.person} cls="need" />
+      <div style="flex:1;min-width:0"><div class="pname">${hook.text}</div>${hook.because && html`<div class="phead clamp2">${hook.because}</div>`}</div></div>
+    <button class="btn sig full" onClick=${() => ui.openDraft({ person: hook.person, intent: hook.intent, target: hook.target, ticker, event_id: eventId })}>${Icon.draft} Draft a message to ${first(hook.person.name)}</button>
+  </div>`;
+}
+
+function HoldingView({ ticker, openPerson }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
-  useEffect(() => { setD(null); setErr(null); window.scrollTo(0, 0); api(`/api/company/${ticker}`).then(setD).catch((e) => setErr(e.message)); }, [ticker]);
-  const back = html`<div class="topbar"><button class="iconbtn" onClick=${() => history.length > 1 ? history.back() : go("/")}>${Icon.back}</button><span class="tick">${ticker}</span><span style="width:34px"></span></div>`;
+  const [need, setNeed] = useState(() => radarCache?.needs?.find((n) => n.ticker === ticker) || null);
+  const [tab, setTab] = useState(null);
+  useEffect(() => {
+    setD(null); setErr(null); setTab(null); window.scrollTo(0, 0); remember(ticker);
+    api(`/api/company/${ticker}`).then(setD).catch((e) => setErr(e.message));
+    const pick = (r) => setNeed(r?.needs?.find((n) => n.ticker === ticker) || null);
+    if (radarCache) pick(radarCache);
+    else api("/api/radar").then((r) => { radarCache = r; pick(r); }).catch(() => {});
+  }, [ticker]);
+  const back = html`<div class="topbar"><button class="iconbtn" aria-label="Back" onClick=${() => (history.length > 1 ? history.back() : go("/"))}>${Icon.back}</button>
+    <span class="tick">${ticker}</span><button class="iconbtn" aria-label=${`Ask FINN about ${ticker}`} onClick=${() => go(`/chat?t=${ticker}`)}>${Icon.ask}</button></div>`;
   if (err) return html`<div>${back}<div class="err">${err}</div></div>`;
   if (!d) return html`<div>${back}<div class="loading">Reading ${ticker}'s filings and transcripts…<div style="margin-top:14px" class="skeleton"></div><div class="skeleton"></div></div></div>`;
-  const s = d.snapshot, L = d.ledger, sc = L.score || {};
+  const fresh = d.cause && Date.now() - new Date(d.cause.filing.ts).getTime() < 7 * 864e5;
+  const cur = tab || (need || fresh ? "updates" : "condition");
+  const p = d.price;
+  const pos52 = p?.high_52w > p?.low_52w ? Math.max(0, Math.min(100, ((p.close - p.low_52w) / (p.high_52w - p.low_52w)) * 100)) : null;
   return html`<div>
     ${back}
-    <div class="dhead">
-      <div class="meta">${[...new Set((d.sector_path || []).slice(1, 4))].slice(0, 2).join(" › ")}${d.in_portfolio && html` · <span class="badge alert">${d.weight}% of portfolio</span>`}</div>
+    <div class="hhead">
+      <div class="meta">${[...new Set((d.sector_path || []).slice(1, 4))].slice(0, 2).join(" › ")}</div>
       <h1>${d.name}</h1>
-      ${d.price && html`<div class="price-line"><span class="p">₹${num(d.price.close, 1)}</span>
-        <span class="delta ${tone(d.price.change_pct)}">${sgn(d.price.change_pct, 1)}</span><${Spark} data=${d.price.spark} w=${90} h=${26} />
-        <span class="tiny muted">vol ${d.price.volume_x?.toFixed(1)}×</span></div>`}
-      <button class="pbtn" style="margin-top:12px" onClick=${() => go(`/chat?t=${ticker}`)}>Ask FINN about ${ticker}</button>
+      ${p && html`<div class="price-line"><span class="p">₹${num(p.close, 1)}</span><span class="delta ${tone(p.change_pct)}">${sgn(p.change_pct, 1)}</span><${Spark} data=${p.spark} w=${84} h=${26} />
+        ${p.volume_x != null && html`<span class="tiny muted">vol ${p.volume_x.toFixed(1)}×</span>`}</div>`}
+      ${pos52 != null && html`<div class="range52"><div class="rbar"><i style=${`left:${pos52}%`}></i></div><div class="row tiny muted"><span>52w low ${num(p.low_52w)}</span><span>high ${num(p.high_52w)}</span></div></div>`}
+      <div class="hstatus">${d.in_portfolio ? html`<span class="chip">${d.weight}% of portfolio</span>` : html`<span class="chip">Research list</span>`}
+        ${need ? html`<span class="badge need">Needs a look</span>` : html`<span class="tiny muted">Nothing urgent</span>`}</div>
     </div>
-    <nav class="stickynav">
-      ${[["promises", "Promises"], ["results", "Latest quarter"], ["numbers", "Numbers"], ["cash", "Cash & debt"], ["case", "Bull / bear"], ["people", "People"], ["filings", "Filings"]]
-        .map(([id, l]) => html`<a href=${"#"} onClick=${(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); }}>${l}</a>`)}
-    </nav>
+    <div class="seg3" role="tablist" aria-label="Holding sections">${[["updates", "Updates"], ["condition", "Condition"], ["network", "Network"]].map(([k, l]) =>
+      html`<button role="tab" aria-selected=${cur === k} class=${cur === k ? "on" : ""} onClick=${() => setTab(k)}>${l}${k === "updates" && need ? html`<i class="sdot"></i>` : ""}</button>`)}</div>
+    ${cur === "updates" && html`<${UpdatesPane} d=${d} need=${need} ticker=${ticker} openPerson=${openPerson} />`}
+    ${cur === "condition" && html`<${ConditionPane} d=${d} ticker=${ticker} />`}
+    ${cur === "network" && html`<${NetworkPane} d=${d} need=${need} ticker=${ticker} openPerson=${openPerson} />`}
+  </div>`;
+}
 
-    <section class="dsec" id="promises">
-      <h2>Promises vs delivery</h2>
-      <p class="sub">What management guided on the last ${L.calls?.length || 0} earnings calls, checked against what they then reported.</p>
-      ${L.method === "heuristic" && html`<div class="banner">Pattern-matched from transcripts: these are guidance-shaped quotes, not verified promises. Add a model key to extract and verify them against reported numbers.</div>`}
+function UpdatesPane({ d, need, ticker, openPerson }) {
+  const [all, setAll] = useState(false);
+  const lead = need ? { title: need.title, line: need.line, label: need.label, ts: need.ts, url: need.url, simulated: need.simulated, tier: need.tier }
+    : d.cause ? { title: d.cause.filing.title, line: d.cause.filing.summary, label: d.cause.filing.category_label, ts: d.cause.filing.ts, url: d.cause.filing.url, tier: "material" } : null;
+  const filings = d.filings || [];
+  const showResults = d.latest_results && lead && /result/i.test(lead.label || "");
+  const qs2 = (q) => `/chat?t=${ticker}&q=${encodeURIComponent(q)}${lead ? `&title=${encodeURIComponent(`${d.name}: ${lead.title}`)}` : ""}`;
+  return html`<div class="pane">
+    ${lead ? html`<article class="card upd">
+      <div class="meta"><span class="dot ${lead.tier}"></span><span>${need ? "Latest update" : "Last material update"}</span><span>·</span><span>${lead.label}</span><span>·</span><span>${ago(lead.ts)}</span>${lead.simulated && html`<span class="badge sim">Simulated</span>`}</div>
+      <h3>${lead.title}</h3>
+      ${lead.line && html`<p class="one">${lead.line}</p>`}
+      ${showResults && html`<${ResultsGrid} r=${d.latest_results} />`}
+      <div class="card-foot"><span>${need?.more ? `+${need.more} related filing${need.more > 1 ? "s" : ""}` : ""}</span>${lead.url ? html`<a href=${lead.url} target="_blank" rel="noopener">Read the filing ↗</a>` : html`<span>no source (simulated)</span>`}</div>
+      ${need?.event_id && html`<${WebContext} i=${{ id: need.event_id, simulated: need.simulated, tier: need.tier }} openPerson=${openPerson} />`}
+    </article>` : html`<div class="empty"><b>No material news lately</b><span>FINN reads ${ticker}'s exchange filings as they land and flags anything that matters on your radar.</span></div>`}
+    <${HookCard} hook=${need?.hook} ticker=${ticker} eventId=${need?.event_id} />
+    ${lead && html`<div class="suggest wrap">${[`What does this mean for ${ticker}?`, `What has ${ticker}'s management said about this before?`].map((q) => html`<button onClick=${() => go(qs2(q))}>${q}</button>`)}</div>`}
+    ${filings.length > 0 && html`<div class="section-h"><h2>Earlier filings</h2><span class="tiny muted">${filings.length}</span></div>
+      <div class="card list">${(all ? filings : filings.slice(0, 5)).map((f) => html`<a class="rline" href=${f.url} target="_blank" rel="noopener"><span class="dot ${f.tier}"></span>
+        <div><div>${f.title}</div><div class="small muted">${f.category_label} · ${ago(f.ts)}</div></div></a>`)}
+        ${filings.length > 5 && html`<button class="linkish small" onClick=${() => setAll(!all)}>${all ? "Show fewer" : `Show all ${filings.length}`}</button>`}</div>`}
+  </div>`;
+}
+
+function ConditionPane({ d, ticker }) {
+  const s = d.snapshot, L = d.ledger, sc = L.score || {};
+  const things = thingsToKnow(d);
+  const worry = things.find((t) => t.tone === "neg");
+  const helper = d.cause?.people?.[0] || d.people?.[0];
+  const bull = d.bull_bear.bull, bear = d.bull_bear.bear;
+  return html`<div class="pane">
+    ${things.length > 0 && html`<div class="section-h" style="margin-top:4px"><h2>${things.length === 1 ? "One thing" : `${things.length} things`} to know</h2><span class="tiny muted">${d.basis || ""}</span></div>
+      <ol class="know">${things.map((t) => html`<li class=${`k-${t.tone}`}>${t.text}</li>`)}</ol>`}
+    <div class="kv kv4">
+      <div><span>Mkt cap</span><b>${num(s.market_cap_cr)}</b><small>₹ cr</small></div>
+      <div><span>P/E</span><b>${num(s.pe, 1)}</b></div>
+      <div><span>${s.lender ? "ROE" : "ROCE"}</span><b>${num(s.lender ? s.roe : s.roce, 1)}%</b></div>
+      <div><span>${s.lender ? "Op. margin" : "EBITDA margin"}</span><b>${num(s.margin_ttm, 1)}%</b></div>
+    </div>
+    ${worry && html`<div class="ask-next">
+      <span class="upper muted">Worth asking</span>
+      <div class="q">What explains this: ${worry.text.replace(/\.$/, "")}?</div>
+      <div class="row-btns"><button class="btn" onClick=${() => go(`/chat?t=${ticker}&q=${encodeURIComponent(`What explains this at ${d.name}: ${worry.text}?`)}`)}>${Icon.ask} Ask FINN</button>
+        ${helper && html`<button class="btn" onClick=${() => ui.openDraft({ person: helper.person, intent: "view", ticker })}>${Icon.draft} Ask ${first(helper.person.name)}</button>`}</div>
+    </div>`}
+    <div style="margin-top:8px">
+    <${Fold} title="Promises vs delivery" hint=${L.method === "heuristic" ? `${L.calls?.length || 0} calls, unverified` : `${sc.delivered || 0} kept · ${sc.missed || 0} missed`}>
+      <p class="small muted" style="margin:0 0 8px">What management guided on the last ${L.calls?.length || 0} earnings calls, checked against what they then reported.</p>
+      ${L.method === "heuristic" && html`<div class="banner">Pattern-matched from transcripts: these are guidance-shaped quotes, not verified promises.</div>`}
       ${L.method !== "heuristic" && html`<div class="scoreboard">
-        <div><b class="pos">${sc.delivered || 0}</b><span>Delivered</span></div>
-        <div><b class="neg">${sc.missed || 0}</b><span>Missed</span></div>
-        <div><b>${sc.on_track || 0}</b><span>On track</span></div>
-        <div><b class=${sc.behind ? "neg" : ""}>${sc.behind || 0}</b><span>Behind</span></div>
-      </div>`}
+        <div><b class="pos">${sc.delivered || 0}</b><span>Delivered</span></div><div><b class="neg">${sc.missed || 0}</b><span>Missed</span></div>
+        <div><b>${sc.on_track || 0}</b><span>On track</span></div><div><b class=${sc.behind ? "neg" : ""}>${sc.behind || 0}</b><span>Behind</span></div></div>`}
       ${L.observations?.length > 0 && html`<ul class="obs">${L.observations.map((o) => html`<li>${o}</li>`)}</ul>`}
       ${!L.items?.length && html`<p class="small muted">${L.calls?.length ? "No explicit numeric guidance found in these calls." : "No concall transcripts are published for this company."}</p>`}
-      <div style="margin-top:6px">${L.items.map((it) => html`<${LedgerItem} it=${it} />`)}</div>
-    </section>
-
-    ${d.latest_results && html`<section class="dsec" id="results">
-      <h2>Latest quarter</h2><p class="sub">${d.basis} · ${d.latest_results.filing_pdf ? html`<a class="linkish" href=${d.latest_results.filing_pdf} target="_blank" rel="noopener">results filing ↗</a>` : ""}</p>
-      <div class="card"><${ResultsGrid} r=${d.latest_results} /></div>
-    </section>`}
-
-    <section class="dsec" id="numbers">
-      <h2>The numbers</h2><p class="sub">${d.business?.what_it_does || (d.sector_path || []).join(" › ")}</p>
+      <div>${(L.items || []).map((it) => html`<${LedgerItem} it=${it} />`)}</div>
+    <//>
+    <${Fold} title="Growth and margins" hint=${`revenue 3y ${sgn(d.trajectory.cagr.revenue_3y, 0)}`}>
+      ${d.business?.what_it_does && html`<p class="small ink2" style="margin:0 0 8px">${d.business.what_it_does}</p>`}
       ${d.business?.segments?.length > 0 && html`<div class="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${d.business.segments.map((g) => html`<span class="chip">${g.name}${g.share_pct != null ? html`<b>${g.share_pct}%</b>` : ""}</span>`)}</div>`}
-      <div class="kv">
-        <div><span>Mkt cap</span><b>${num(s.market_cap_cr)}</b></div>
-        <div><span>P/E</span><b>${num(s.pe, 1)}</b></div>
-        <div><span>${s.lender ? "ROE" : "ROCE"}</span><b>${num(s.lender ? s.roe : s.roce, 1)}%</b></div>
-        <div><span>Revenue TTM</span><b>${num(s.revenue_ttm)}</b></div>
-        <div><span>PAT TTM</span><b>${num(s.pat_ttm)}</b></div>
-        <div><span>${s.lender ? "Op. margin" : "EBITDA m."}</span><b>${num(s.margin_ttm, 1)}%</b></div>
-      </div>
       <div class="small muted">₹ crore. Revenue CAGR 3y <b class="num">${sgn(d.trajectory.cagr.revenue_3y, 0)}</b> · 5y <b class="num">${sgn(d.trajectory.cagr.revenue_5y, 0)}</b> · PAT 3y <b class="num">${sgn(d.trajectory.cagr.pat_3y, 0)}</b></div>
       <${BarLine} labels=${d.trajectory.years} bars=${d.trajectory.revenue} line=${d.trajectory.margin} barLabel="Revenue (annual)" lineLabel=${s.lender ? "Op. margin %" : "EBITDA margin %"} />
       <ul class="flags">${d.trajectory.flags.map((f) => html`<li class=${f.tone}>${f.text}</li>`)}</ul>
       <${BarLine} labels=${d.trajectory.quarters.periods} bars=${d.trajectory.quarters.revenue} line=${d.trajectory.quarters.margin} barLabel="Revenue (quarterly)" lineLabel="Margin %" h=${100} />
-    </section>
-
-    <section class="dsec" id="cash">
-      <h2>Cash & balance sheet</h2><p class="sub">Do profits turn into cash, and what funds the growth?</p>
+      ${d.latest_results && html`<div class="section-h"><h2>Latest quarter</h2></div><${ResultsGrid} r=${d.latest_results} />`}
+    <//>
+    <${Fold} title="Cash and debt" hint=${d.cash.flags.length + d.balance_sheet.flags.length ? `${d.cash.flags.length + d.balance_sheet.flags.length} flags` : "clean"}>
       <ul class="flags">${[...d.cash.flags, ...d.balance_sheet.flags].map((f) => html`<li class=${f.tone}>${f.text}</li>`)}</ul>
       <table class="minitable">
-        <thead><tr><th></th>${d.cash.periods.slice(-5).map((p) => html`<th>${shortPeriod(p)}</th>`)}</tr></thead>
+        <thead><tr><th></th>${d.cash.periods.slice(-5).map((x) => html`<th>${shortPeriod(x)}</th>`)}</tr></thead>
         <tbody>
           <tr><td>Cash from ops</td>${d.cash.cfo.slice(-5).map((v) => html`<td>${num(v)}</td>`)}</tr>
           <tr><td>PAT</td>${d.cash.pat.slice(-5).map((v) => html`<td>${num(v)}</td>`)}</tr>
@@ -455,50 +484,41 @@ function DossierView({ ticker, openPerson }) {
         </tbody>
       </table>
       <table class="minitable" style="margin-top:12px">
-        <thead><tr><th></th>${d.balance_sheet.periods.slice(-5).map((p) => html`<th>${shortPeriod(p)}</th>`)}</tr></thead>
+        <thead><tr><th></th>${d.balance_sheet.periods.slice(-5).map((x) => html`<th>${shortPeriod(x)}</th>`)}</tr></thead>
         <tbody>
           <tr><td>Borrowings</td>${d.balance_sheet.borrowings.slice(-5).map((v) => html`<td>${num(v)}</td>`)}</tr>
           ${!d.balance_sheet.lender && html`<tr><td>Debt / equity</td>${d.balance_sheet.de.slice(-5).map((v) => html`<td>${v == null ? "–" : v.toFixed(2)}</td>`)}</tr>`}
         </tbody>
       </table>
-      ${!d.balance_sheet.lender && d.balance_sheet.wc_days["Cash Conversion Cycle"]?.length > 0 && html`<table class="minitable" style="margin-top:12px">
-        <thead><tr><th>Days</th>${d.balance_sheet.eff_periods.slice(-5).map((p) => html`<th>${shortPeriod(p)}</th>`)}</tr></thead>
-        <tbody>${["Debtor Days", "Inventory Days", "Days Payable", "Cash Conversion Cycle"].map((k) => html`<tr><td>${k.replace(" Days", "")}</td>${(d.balance_sheet.wc_days[k] || []).slice(-5).map((v) => html`<td>${num(v)}</td>`)}</tr>`)}</tbody>
-      </table>`}
-    </section>
-
-    <section class="dsec" id="case">
-      <h2>Bull vs bear</h2><p class="sub">${d.bull_bear.source === "model" ? "Argued by the deep model from the facts above only." : "Assembled from the computed signals above."}</p>
+    <//>
+    <${Fold} title="Bull vs bear" hint=${`${bull.length} for · ${bear.length} against`}>
+      <p class="small muted" style="margin:0 0 8px">${d.bull_bear.source === "model" ? "Argued by the deep model from the facts above only." : "Assembled from the computed signals above."}</p>
       <div class="bb">
-        <div class="col bull"><h3>Bull</h3><ol>${d.bull_bear.bull.map((b) => html`<li>${b.point}<small>${b.evidence}</small></li>`)}</ol>${!d.bull_bear.bull.length && html`<p class="small muted">Nothing stands out.</p>`}</div>
-        <div class="col bear"><h3>Bear</h3><ol>${d.bull_bear.bear.map((b) => html`<li>${b.point}<small>${b.evidence}</small></li>`)}</ol>${!d.bull_bear.bear.length && html`<p class="small muted">Nothing stands out.</p>`}</div>
+        <div class="col bull"><h3>Bull</h3><ol>${bull.map((b) => html`<li>${b.point}<small>${b.evidence}</small></li>`)}</ol>${!bull.length && html`<p class="small muted">Nothing stands out.</p>`}</div>
+        <div class="col bear"><h3>Bear</h3><ol>${bear.map((b) => html`<li>${b.point}<small>${b.evidence}</small></li>`)}</ol>${!bear.length && html`<p class="small muted">Nothing stands out.</p>`}</div>
       </div>
-    </section>
-
-    <section class="dsec" id="people">
-      ${d.cause && html`<h2>Who can explain the latest update</h2>
-        <p class="sub">${d.cause.filing.category_label} · ${ago(d.cause.filing.ts)}: ${d.cause.filing.title}. Ranked for this event and subject, not the company in general.</p>
-        <div class="card"><${PeopleList} people=${d.cause.people} onPerson=${openPerson} />
-          <div class="tiny muted" style="margin-top:8px">${d.cause.coverage.level === "strong" ? "Your network covers this: " : "Coverage is thin: "}${d.cause.coverage.reason}.</div>
-          <${WebLeads} query=${d.cause.web_query} auto=${d.cause.coverage.search_web} /></div>`}
-      <h2 style=${d.cause ? "margin-top:22px" : ""}>Who can help</h2><p class="sub">People in your network closest to ${d.name}${d.themes?.length ? `, its competitors, or ${d.themes.join(", ")}` : ""}.</p>
-      <div class="card"><${PeopleList} people=${d.people} onPerson=${openPerson} />
-        ${!d.cause && !d.people?.length && html`<${WebLeads} query=${{ company: d.name, theme: d.themes?.[0], text: d.name }} auto=${true} />`}</div>
-    </section>
-
-    <section class="dsec" id="filings">
-      <h2>Recent filings</h2>
-      <div class="card" style="padding:4px 14px">${d.filings.map((f) => html`<div class="rline">
-        <span class="dot ${f.tier}" style="margin-top:7px"></span>
-        <div><a href=${f.url} target="_blank" rel="noopener" style="text-decoration:none">${f.title}</a>
-          <div class="small muted">${f.category_label} · ${ago(f.ts)}${f.summary ? ` · ${f.summary.slice(0, 120)}` : ""}</div></div>
-      </div>`)}</div>
-      <p class="tiny muted" style="margin-top:14px">Sources: ${L.calls?.length || 0} concall transcripts (${(L.calls || []).join(", ")}), exchange filings, reported financials (${d.basis}). Generated ${ago(d.generated_at)}.
-        ${d.documents.annual_reports?.[0] && html` <a class="linkish" href=${d.documents.annual_reports[0].url} target="_blank" rel="noopener">Annual report ${d.documents.annual_reports[0].year} ↗</a>`}</p>
-    </section>
+    <//>
+    </div>
+    <p class="tiny muted" style="margin-top:14px">Sources: ${L.calls?.length || 0} concall transcripts${L.calls?.length ? ` (${L.calls.join(", ")})` : ""}, exchange filings, reported financials (${d.basis}). Generated ${ago(d.generated_at)}.
+      ${d.documents?.annual_reports?.[0] && html` <a class="linkish" href=${d.documents.annual_reports[0].url} target="_blank" rel="noopener">Annual report ${d.documents.annual_reports[0].year} ↗</a>`}</p>
   </div>`;
 }
 
+function NetworkPane({ d, need, ticker, openPerson }) {
+  const eventId = need?.event_id;
+  const short = d.name.replace(/\s+(Ltd\.?|Limited)$/i, "");
+  return html`<div class="pane">
+    <${HookCard} hook=${need?.hook} ticker=${ticker} eventId=${eventId} />
+    ${d.cause && html`<div class="section-h"><h2>Who can explain the latest update</h2></div>
+      <div class="card"><${PeopleList} people=${d.cause.people} onPerson=${openPerson} draft=${{ ticker, event_id: eventId }} />
+        <div class="tiny muted" style="margin-top:8px">${d.cause.coverage.level === "strong" ? "Your network covers this: " : "Coverage is thin: "}${d.cause.coverage.reason}.</div>
+        <${WebLeads} query=${d.cause.web_query} auto=${d.cause.coverage.search_web} /></div>`}
+    <div class="section-h"><h2>Who knows ${short}</h2></div>
+    <p class="tiny muted" style="margin:-4px 0 8px">People closest to ${short}${d.themes?.length ? `, its competitors, or ${d.themes.join(", ")}` : ""}.</p>
+    <div class="card"><${PeopleList} people=${d.people} onPerson=${openPerson} draft=${{ ticker }} />
+      ${!d.cause && !d.people?.length && html`<${WebLeads} query=${{ company: d.name, theme: d.themes?.[0], text: d.name }} auto=${true} />`}</div>
+  </div>`;
+}
 function LedgerItem({ it }) {
   const [open, setOpen] = useState(false);
   const unit = it.kind === "absolute_cr" ? " cr" : "%";
@@ -517,41 +537,39 @@ function LedgerItem({ it }) {
 }
 
 // ---------------------------------------------------------------------------
-// Portfolio + Network tabs
+// Research: any ticker or question, plus the names you're watching
 // ---------------------------------------------------------------------------
-function PortfolioView() {
+const SUGGESTIONS = ["How is Dixon's margin holding up, and why?", "What changed across my portfolio this week?", "Who can intro me to the new CFO of Deepak Nitrite?", "What did PI Industries guide for FY27?", "Who knows semiconductors?", "SRF"];
+
+function ResearchView({ openAsk }) {
+  const [q, setQ] = useState("");
   const [d, setD] = useState(null);
-  const [sort, setSort] = useState("move");
-  useEffect(() => { api("/api/portfolio").then(setD); }, []);
-  const rows = useMemo(() => {
-    if (!d) return [];
-    const r = [...d.holdings];
-    if (sort === "move") r.sort((a, b) => Math.abs(b.metrics.change_pct || 0) - Math.abs(a.metrics.change_pct || 0));
-    if (sort === "volume") r.sort((a, b) => (b.metrics.volume_x || 0) - (a.metrics.volume_x || 0));
-    if (sort === "weight") r.sort((a, b) => b.weight - a.weight);
-    return r;
-  }, [d, sort]);
+  const recent = useMemo(() => { try { return JSON.parse(localStorage.getItem("finn.recent") || "[]"); } catch { return []; } }, []);
+  useEffect(() => { api("/api/portfolio").then(setD).catch(() => setD({ holdings: [], research: [] })); }, []);
+  const names = Object.fromEntries((d ? [...d.holdings, ...d.research] : []).map((h) => [h.ticker, h]));
+  const submit = (t) => { t = (t ?? q).trim(); if (!t) return; setQ(""); document.activeElement?.blur(); openAsk(t); };
+  const Row = ({ t, h }) => html`<div class="list-row" onClick=${() => go(`/c/${t}`)}>
+    <div style="min-width:0"><div class="pname">${h?.name || t}</div><div class="phead"><span class="tick">${t}</span> ${h?.theme || ""}</div></div>
+    <div style="display:flex;align-items:center;gap:8px">${h?.metrics?.change_pct != null && html`<span class="delta ${tone(h.metrics.change_pct)}">${sgn(h.metrics.change_pct, 1)}</span>`}<span class="muted chev">${Icon.chev}</span></div></div>`;
   return html`<div>
-    <div class="topbar"><div class="wordmark">Portfolio <small>${d ? `${d.holdings.length} holdings` : ""}</small></div></div>
-    <div class="controls"><div class="seg">${[["move", "Biggest move"], ["volume", "Volume"], ["weight", "Weight"]].map(([k, l]) => html`<button class=${sort === k ? "on" : ""} onClick=${() => setSort(k)}>${l}</button>`)}</div></div>
-    <div class="section">
-      ${!d && html`<div class="skeleton"></div>`}
-      <div class="card" style="padding:2px 14px">${rows.map((h) => html`<div class="list-row" onClick=${() => go(`/c/${h.ticker}`)}>
-        <div style="min-width:0"><div class="pname">${h.name}</div><div class="phead"><span class="tick">${h.ticker}</span> ${h.weight}% · ${h.theme}</div></div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <${Spark} data=${h.metrics.spark} />
-          <div style="text-align:right;min-width:58px"><div class="delta ${tone(h.metrics.change_pct)}">${sgn(h.metrics.change_pct, 1)}</div>
-            <div class="tiny ${h.metrics.volume_x >= 2 ? "" : "muted"}" style=${h.metrics.volume_x >= 2 ? "color:var(--accent);font-weight:600" : ""}>${h.metrics.volume_x?.toFixed(1)}× vol</div></div>
-        </div>
-      </div>`)}</div>
-      ${d && html`<div class="section-h"><h2>Research list</h2></div>
-        <div class="card" style="padding:2px 14px">${d.research.map((h) => html`<div class="list-row" onClick=${() => go(`/c/${h.ticker}`)}>
-          <div><div class="pname">${h.name}</div><div class="phead"><span class="tick">${h.ticker}</span> ${h.theme}</div></div><span class="muted">${Icon.arrow}</span></div>`)}</div>
-        <p class="tiny muted" style="text-align:center;margin-top:12px">Any NSE ticker works: type it in the ask bar.</p>`}
+    <div class="topbar"><div class="wordmark">Research</div></div>
+    <div class="hero"><h1>What do you want to know?</h1><p>A ticker opens its dossier. A question goes to FINN, which reads filings, transcripts and your network and cites every figure.</p></div>
+    <div class="section" style="padding-top:0">
+      <form class="ask big" onSubmit=${(e) => { e.preventDefault(); submit(); }}>
+        <span class="muted">${Icon.search}</span>
+        <input value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Ticker or question" aria-label="Ticker or question" enterkeyhint="go" autocomplete="off" />
+        <button class="go" type="submit" aria-label="Go">${Icon.arrow}</button>
+      </form>
+      <div class="section-h"><h2>Try asking</h2></div>
+      <div class="suggest wrap" style="padding-top:0">${SUGGESTIONS.map((s) => html`<button onClick=${() => submit(s)}>${s}</button>`)}</div>
+      ${recent.length > 0 && html`<div class="section-h"><h2>Recently opened</h2></div>
+        <div class="card list">${recent.map((t) => html`<${Row} t=${t} h=${names[t]} />`)}</div>`}
+      ${d?.research?.length > 0 && html`<div class="section-h"><h2>Your research list</h2><span class="tiny muted">not held</span></div>
+        <div class="card list">${d.research.map((h) => html`<${Row} t=${h.ticker} h=${h} />`)}</div>`}
+      <p class="tiny muted" style="text-align:center;margin-top:12px">Any NSE ticker works.</p>
     </div>
   </div>`;
 }
-
 // ---------------------------------------------------------------------------
 // Flow 1: people from the public web when the network has no one
 // ---------------------------------------------------------------------------
@@ -613,32 +631,8 @@ function WebContext({ i, openPerson }) {
 }
 
 // ---------------------------------------------------------------------------
-// Flow 3: keep in touch, add people
+// Flow 3: add people (keep-in-touch nudges now live in the People to-do list)
 // ---------------------------------------------------------------------------
-function KeepInTouch({ openPerson, limit = 6 }) {
-  const [d, setD] = useState(null);
-  const [drafts, setDrafts] = useState({});
-  const [done, setDone] = useState({});
-  const load = () => api(`/api/network/nudges?limit=${limit}`).then(setD).catch(() => setD({ items: [] }));
-  useEffect(() => { load(); }, []);
-  if (!d) return html`<div class="skeleton"></div>`;
-  if (!d.items.length) return html`<div class="card small muted">No one is overdue. Nice.</div>`;
-  const touch = async (id) => { await api(`/api/network/contacts/${id}/touch`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); haptic(15); setDone({ ...done, [id]: true }); };
-  const draft = async (id) => { setDrafts({ ...drafts, [id]: "…" }); const r = await api(`/api/network/nudges/${id}/draft`, { method: "POST" }); setDrafts({ ...drafts, [id]: r.text }); };
-  return html`<div class="card" style="padding:2px 14px">${d.items.map((n) => html`<div class="nudge">
-    <div class="person" style="cursor:pointer" onClick=${() => openPerson(n.person.id)}><${Avatar} p=${n.person} cls=${n.lead ? "target" : ""} />
-      <div style="flex:1;min-width:0"><div class="pname">${n.person.name} ${n.lead ? html`<span class="badge web">New lead</span>` : html`<${Warmth} w=${n.warmth} />`}</div>
-        <div class="phead">${n.person.headline}</div></div>
-      <div class="prio" title="Priority"><i style=${`width:${Math.round(n.scores.priority * 100)}%`}></i></div></div>
-    <div class="small ink2" style="margin:6px 0 0">${done[n.person.id] ? "Logged. The clock restarts today." : n.reason}</div>
-    ${!done[n.person.id] && html`<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-      <button class="pbtn" onClick=${() => touch(n.person.id)}>I spoke to them</button>
-      <button class="pbtn ghost" onClick=${() => draft(n.person.id)}>Draft a note</button></div>`}
-    ${drafts[n.person.id] && html`<div class="draft" contenteditable="true">${drafts[n.person.id]}</div>
-      <div style="display:flex;gap:8px;align-items:center"><button class="linkish tiny" onClick=${() => navigator.clipboard?.writeText(drafts[n.person.id])}>Copy</button><span class="tiny muted">FINN never sends anything for you.</span></div>`}
-  </div>`)}</div>`;
-}
-
 function AddContact({ onAdded }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", title: "", org_name: "", context: "", last_contact: new Date().toISOString().slice(0, 10), tie_type: "met" });
@@ -681,31 +675,104 @@ function ModelCard() {
   </div>`;
 }
 
-function NetworkView({ openPerson, openAsk }) {
-  const [d, setD] = useState(null);
-  const [v, setV] = useState(0);
-  useEffect(() => { api("/api/network").then(setD); }, [v]);
-  const cold = d ? d.people.filter((p) => p.warmth.label === "dormant") : [];
+// ---------------------------------------------------------------------------
+// People: who to contact now (top), the network at a glance, and everyone in it
+// ---------------------------------------------------------------------------
+function TodoRow({ t, onDone, lead }) {
+  const ctx = { reason: t.reason, ticker: t.ticker, event_id: t.event?.id, target: t.target, intent: t.intent, todo: t.id };
+  return html`<div class="todo">
+    <div class="person" onClick=${() => ui.openPerson(t.person.id, ctx)}>
+      <${Avatar} p=${t.person} cls=${t.kind === "news" ? "need" : t.kind === "lead" ? "target" : ""} />
+      <div style="flex:1;min-width:0"><div class="pname">${t.title}</div>
+        <div class="phead">${t.ticker && t.kind === "news" ? html`<span class="tick">${t.ticker}</span> ` : ""}${t.kind === "lead" ? "new lead" : html`<${Warmth} w=${t.warmth} />`}${t.simulated ? html` <span class="badge sim">Simulated</span>` : ""}</div></div>
+    </div>
+    <div class="small ink2 clamp2" style="margin-top:6px">${t.reason}</div>
+    <div class="row-btns"><button class=${`btn ${lead ? "sig" : ""}`} onClick=${() => ui.openDraft({ person: t.person, ...ctx })}>${Icon.draft} Draft message</button>
+      <button class="btn" onClick=${() => onDone(t)}>Done</button></div>
+  </div>`;
+}
+
+function Todo({ d, setD }) {
+  const [more, setMore] = useState(false);
+  const [toast, setToast] = useState(null);
+  useEffect(() => { if (!toast) return; const k = setTimeout(() => setToast(null), 4000); return () => clearTimeout(k); }, [toast]);
+  if (!d) return html`<div class="skeleton"></div>`;
+  if (!d.items.length) return html`<div class="empty"><b>No one needs a call right now</b><span>People land here when the news gives you a reason to call, or when you're overdue to catch up.</span></div>`;
+  const done = async (t) => {
+    setD((x) => ({ ...x, items: x.items.filter((y) => y.id !== t.id) }));
+    haptic(15);
+    setToast(`${first(t.person.name)}: done${t.person.is_contact ? ", keep-in-touch clock restarted" : ""}.`);
+    await post("/api/people/todo/done", { id: t.id, person_id: t.person.is_contact ? t.person.id : null }).catch(() => {});
+  };
+  const N = 4, rows = more ? d.items : d.items.slice(0, N);
   return html`<div>
-    <div class="topbar"><div class="wordmark">Network <small>${d ? `${d.people.length} people` : ""}</small></div></div>
-    <div class="hero"><h1 style="font-size:28px">What your network knows.</h1><p>Expertise inferred from careers, not tags. Tap a theme to ask.</p></div>
-    <div class="section">
-      <div class="section-h"><h2>Keep in touch</h2></div>
-      <p class="tiny muted" style="margin:-4px 0 8px">Ranked by how far past your usual rhythm you are, how much they matter to your portfolio, and whether there's a reason to call now.</p>
-      <${KeepInTouch} key=${v} openPerson=${openPerson} />
-      <div style="margin:10px 0 18px"><${AddContact} onAdded=${() => setV(v + 1)} /></div>
-      ${!d && html`<div class="skeleton"></div>`}
-      ${d && html`<div class="card" style="padding:2px 14px">${d.themes.map((t) => html`<div class="theme-row">
-        <h4 style="cursor:pointer" onClick=${() => openAsk(`who knows ${t.theme}?`)}>${t.theme}</h4>
-        <div class="stack">${t.people.map((e) => html`<div style="display:grid;grid-template-columns:1fr 70px;gap:10px;align-items:center;cursor:pointer" onClick=${() => openPerson(e.person.id)}>
-          <div class="small"><b>${e.person.name}</b> <span class="muted">· ${e.years ? `${e.years.toFixed(0)} yrs · ` : ""}${e.evidence?.[0] || e.why?.[0] || ""}</span></div>
-          <div class="bar"><i style=${`width:${Math.round(e.score * 100)}%`}></i></div></div>`)}</div>
-      </div>`)}</div>`}
-      <div class="section-h"><h2>The ranking model</h2></div>
-      <${ModelCard} />
-      ${cold.length > 0 && html`<div class="section-h"><h2>Going cold</h2></div>
-        <div class="card" style="padding:2px 14px">${cold.map((p) => html`<div class="list-row" onClick=${() => openPerson(p.id)}>
-          <div class="person"><${Avatar} p=${p} /><div><div class="pname">${p.name}</div><div class="phead">${p.headline}</div></div></div><${Warmth} w=${p.warmth} /></div>`)}</div>`}
+    <div class="card list">${rows.map((t, k) => html`<${TodoRow} key=${t.id} t=${t} lead=${k === 0} onDone=${done} />`)}</div>
+    ${d.items.length > N && html`<button class="fold" style="width:100%;text-align:left" onClick=${() => setMore(!more)}>${more ? "Show fewer" : html`<b>${d.items.length - N}</b> more people worth a call`}</button>`}
+    ${toast && html`<div class="toast" role="status"><span>${toast}</span></div>`}
+  </div>`;
+}
+
+// Everyone you know, by how warm the relationship is: closer to the centre = spoke more recently.
+function Orbit({ people, hot, onPerson }) {
+  const [ref, W] = useWidth(343);
+  const H = Math.round(Math.min(W, 380) * 0.88);
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 18;
+  const rings = { warm: R * 0.4, cooling: R * 0.69, dormant: R * 0.97 };
+  const groups = { warm: [], cooling: [], dormant: [] };
+  people.forEach((p) => (groups[p.warmth.label] || groups.dormant).push(p));
+  const nodes = [];
+  Object.entries(groups).forEach(([k, ps], gi) => ps.forEach((p, i) => {
+    const a = -Math.PI / 2 + 0.45 + gi * 0.6 + (i / Math.max(1, ps.length)) * Math.PI * 2;
+    nodes.push({ p, x: cx + Math.cos(a) * rings[k], y: cy + Math.sin(a) * rings[k] });
+  }));
+  return html`<div ref=${ref}><svg class="orbit" width=${W} height=${H} viewBox="0 0 ${W} ${H}" role="img" aria-label="Your contacts by how warm the relationship is">
+    ${Object.entries(rings).map(([k, r]) => html`<circle cx=${cx} cy=${cy} r=${r} class="oring ${k}" />`)}
+    <circle cx=${cx} cy=${cy} r="17" class="oyou" /><text x=${cx} y=${cy + 4} text-anchor="middle" class="oyout">You</text>
+    ${nodes.map((n) => html`<g class="onode ${hot.has(n.p.id) ? "hot" : ""} ${n.p.warmth.label === "not yet contacted" ? "lead" : ""}" role="button" tabindex="0" aria-label=${n.p.name} onClick=${() => onPerson(n.p.id)}>
+      <circle cx=${n.x} cy=${n.y} r="22" class="hit" /><circle cx=${n.x} cy=${n.y} r=${hot.has(n.p.id) ? 15 : 12.5} /><text x=${n.x} y=${n.y + 4} text-anchor="middle">${n.p.initials}</text></g>`)}
+    ${Object.entries(rings).map(([k, r]) => html`<text x=${cx - r * 0.7071 - 4} y=${cy + r * 0.7071 + 14} text-anchor="end" class="olabel">${k}</text>`)}
+  </svg></div>`;
+}
+
+const FILTERS = [["all", "All"], ["warm", "Warm"], ["cooling", "Cooling"], ["dormant", "Dormant"], ["lead", "New leads"]];
+function Directory({ people, onPerson }) {
+  const [q, setQ] = useState("");
+  const [f, setF] = useState("all");
+  const ql = q.trim().toLowerCase();
+  const rows = people.filter((p) => (f === "all" || (f === "lead" ? p.warmth.label === "not yet contacted" : p.warmth.label === f))
+    && (!ql || `${p.name} ${p.headline || ""} ${p.org || ""} ${(p.tags || []).join(" ")}`.toLowerCase().includes(ql)));
+  return html`<div>
+    <label class="searchbox">${Icon.search}<input value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Name, company or skill" aria-label="Search your network" autocomplete="off" /></label>
+    <div class="chips-row" role="tablist" aria-label="Filter by warmth">${FILTERS.map(([k, l]) => html`<button role="tab" aria-selected=${f === k} class="toggle ${f === k ? "on" : ""}" onClick=${() => setF(k)}>${l}</button>`)}</div>
+    <div class="card list">${rows.map((p) => html`<div class="list-row" onClick=${() => onPerson(p.id)}>
+      <div class="person" style="min-width:0"><${Avatar} p=${p} /><div style="min-width:0"><div class="pname">${p.name}</div><div class="phead clamp1">${p.headline}</div></div></div>
+      ${p.warmth.label === "not yet contacted" ? html`<span class="badge web">Lead</span>` : html`<${Warmth} w=${p.warmth} />`}</div>`)}
+      ${!rows.length && html`<p class="small muted">No one matches.</p>`}</div>
+  </div>`;
+}
+
+function PeopleView({ openPerson, openAsk }) {
+  const [net, setNet] = useState(null);
+  const [todo, setTodo] = useState(null);
+  const [v, setV] = useState(0);
+  useEffect(() => { api("/api/network").then(setNet).catch(() => setNet({ people: [], themes: [] })); }, [v]);
+  useEffect(() => { api("/api/people/todo").then(setTodo).catch(() => setTodo({ items: [] })); }, [v]);
+  const hot = new Set((todo?.items || []).slice(0, 4).map((t) => t.person.id));   // the four the list shows first
+  const count = (l) => (net ? net.people.filter((p) => p.warmth.label === l).length : 0);
+  return html`<div>
+    <div class="topbar"><div class="wordmark">People <small>${net ? `${net.people.length} in your network` : ""}</small></div></div>
+    <div class="section" style="padding-top:0">
+      <div class="section-h" style="margin-top:6px"><h2>To do</h2><span class="tiny muted">${todo?.items?.length ? `${todo.items.length} people` : ""}</span></div>
+      <${Todo} d=${todo} setD=${setTodo} />
+      <div class="section-h"><h2>Your network at a glance</h2><span class="tiny muted">${net ? `${count("warm")} warm · ${count("cooling")} cooling · ${count("dormant")} dormant` : ""}</span></div>
+      <div class="card">${net ? html`<${Orbit} people=${net.people} hot=${hot} onPerson=${openPerson} />` : html`<div class="skeleton" style="height:260px;margin:0"></div>`}
+        <div class="legend2" style="justify-content:center"><span><i class="lg-hot"></i>top of your to-do list</span><span><i class="lg-ring"></i>closer to you = spoke more recently</span></div></div>
+      <div class="section-h"><h2>Everyone</h2></div>
+      ${net ? html`<${Directory} people=${net.people} onPerson=${openPerson} />` : html`<div class="skeleton"></div>`}
+      <div style="margin:12px 0 4px"><${AddContact} onAdded=${() => setV(v + 1)} /></div>
+      ${net?.themes?.length > 0 && html`<div class="section-h"><h2>Who knows what</h2><span class="tiny muted">tap to ask</span></div>
+        <div class="suggest wrap" style="padding-top:0">${net.themes.map((t) => html`<button onClick=${() => openAsk(`Who knows ${t.theme}?`)}>${t.theme} <span class="muted">${t.people.length}</span></button>`)}</div>`}
+      <div style="margin-top:14px"><${Fold} title="How FINN ranks people" hint="the model"><${ModelCard} /><//></div>
     </div>
   </div>`;
 }
@@ -746,41 +813,99 @@ function PhoneAlerts() {
 
 function PersonSheet({ id, ctx, openPerson }) {
   const [p, setP] = useState(null);
-  const [draft, setDraft] = useState(null);
-  useEffect(() => { setP(null); setDraft(null); api(`/api/people/${id}`).then(setP); }, [id]);
+  const [touched, setTouched] = useState(false);
+  useEffect(() => { setP(null); setTouched(false); api(`/api/people/${id}`).then(setP).catch(() => setP({ error: true })); }, [id]);
   if (!p) return html`<div class="loading">Loading…</div>`;
-  const reason = ctx?.event ? `${ctx.event.company}'s ${ctx.event.category_label.toLowerCase()} news` : ctx?.reason ? ctx.event?.title : null;
-  const note = () => {
-    const first = p.name.split(" ")[0];
-    const topic = ctx?.event?.title ? `${(ctx.event.company || ctx.org || "").trim()}: ${ctx.event.title.toLowerCase()}` : ctx?.org ? `the news out of ${ctx.org}` : "what you're working on";
-    setDraft(`Hi ${first}, it's been a while. Saw ${topic} and thought of you right away. Would love 20 minutes to get your read on it, and to catch up properly. Coffee next week?`);
-  };
+  if (p.error) return html`<div class="err">Couldn't load this person.</div>`;
+  const f = first(p.name);
+  const why = ctx?.reason || (p.nudge && (p.nudge.due || p.nudge.hook) ? p.nudge.reason : null);
+  const touch = async () => { await post(`/api/network/contacts/${p.id}/touch`, {}).catch(() => {}); haptic(15); setTouched(true); };
   return html`<div>
     <div class="person" style="align-items:center">
       <${Avatar} p=${p} cls="lg ${p.is_contact ? "" : "target"}" />
-      <div><h2 style="margin:0">${p.name}</h2><div class="phead">${p.headline}${p.location ? ` · ${p.location}` : ""}</div></div>
+      <div style="min-width:0"><h2 style="margin:0">${p.name}</h2><div class="phead">${p.headline}${p.location ? ` · ${p.location}` : ""}</div></div>
     </div>
     ${p.simulated && html`<p class="small" style="margin:10px 0 0"><span class="badge sim">Simulated profile</span> <span class="muted">${p.source}</span></p>`}
-    ${p.warmth && html`<div class="callout"><span class="upper">How you know ${p.name.split(" ")[0]}</span>
+    <div class="row-btns" style="margin-top:14px">
+      <button class="btn sig" onClick=${() => ui.openDraft({ person: p, intent: ctx?.intent, ticker: ctx?.ticker, event_id: ctx?.event_id, target: ctx?.target, todo: ctx?.todo })}>${Icon.draft} Draft a message</button>
+      ${p.is_contact && html`<button class="btn" disabled=${touched} onClick=${touch}>${touched ? "Logged today" : "I spoke to them"}</button>`}
+    </div>
+    ${why && html`<div class="callout sigc"><span class="upper">Why get in touch now</span><div class="small">${why}</div></div>`}
+    ${p.warmth && html`<div class="callout"><span class="upper">How you know ${f}</span>
       <div class="small ink2">${p.warmth.context}</div>
-      <div style="margin-top:6px"><${Warmth} w=${p.warmth} /> <span class="tiny muted">· last spoke ${p.warmth.last_contact}</span></div>
+      <div style="margin-top:6px"><${Warmth} w=${p.warmth} />${p.warmth.last_contact ? html` <span class="tiny muted">· last spoke ${p.warmth.last_contact}</span>` : ""}</div>
       ${p.overlap_with_you?.length > 0 && html`<div class="small ink2" style="margin-top:6px">${p.overlap_with_you[0]}</div>`}
     </div>`}
     ${p.paths?.length > 0 && html`<div class="callout"><span class="upper">Your way in</span>
       ${p.paths.map((x, k) => k === 0 ? html`<${PathView} path=${x} target=${p} onPerson=${openPerson} /><${EvidenceGraph} g=${x.graph} />`
         : html`<div class="small ink2" style="margin-top:6px">${x.via ? html`Or via <b style="cursor:pointer" onClick=${() => openPerson(x.via.id)}>${x.via.name}</b>: ` : ""}${x.why[0]}</div>`)}
     </div>`}
-    <div class="section-h"><h2>Career</h2></div>
-    <${Timeline} roles=${p.roles} />
-    <div style="margin-top:10px">${[...p.roles].reverse().map((r) => html`<div class="rline" style="grid-template-columns:1fr auto">
-      <div><b>${r.title.split("→").pop().trim()}</b><div class="small muted">${r.org_name}${r.ticker ? html` · <span class="tick link" onClick=${() => go(`/c/${r.ticker}`)}>${r.ticker}</span>` : ""}</div></div>
-      <span class="tiny muted num">${r.from.slice(0, 4)}–${r.to ? r.to.slice(0, 4) : "now"}</span></div>`)}</div>
+    ${p.roles?.length > 0 && html`<div class="section-h"><h2>Career</h2></div>
+      <${Timeline} roles=${p.roles} />
+      <div style="margin-top:10px">${[...p.roles].reverse().map((r) => html`<div class="rline" style="grid-template-columns:1fr auto">
+        <div><b>${r.title.split("→").pop().trim()}</b><div class="small muted">${r.org_name}${r.ticker ? html` · <span class="tick link" onClick=${() => go(`/c/${r.ticker}`)}>${r.ticker}</span>` : ""}</div></div>
+        <span class="tiny muted num">${(r.from || "").slice(0, 4)}–${r.to ? r.to.slice(0, 4) : "now"}</span></div>`)}</div>`}
     ${p.education?.length > 0 && html`<div class="section-h"><h2>Education</h2></div>${p.education.map((e) => html`<div class="small ink2">${e.org_name}, ${e.degree} <span class="muted">(${e.from}–${e.to})</span></div>`)}`}
-    ${p.is_contact && html`<div style="margin-top:16px;display:flex;gap:8px"><button class="pbtn" onClick=${note}>Draft a note</button></div>`}
-    ${draft && html`<div class="draft" contenteditable="true">${draft}</div><p class="tiny muted">A starting point. FINN never sends anything for you.</p>`}
   </div>`;
 }
 
+// Message drafter: pick what you want and where it goes; FINN drafts from facts it can show you.
+const CHANNELS = [["whatsapp", "WhatsApp"], ["email", "Email"], ["linkedin", "LinkedIn"]];
+const INTENT_LABEL = { intro: "Ask for an intro", view: "Get their view", catchup: "Catch up", first: "Introduce yourself" };
+
+function DraftSheet({ ctx, close }) {
+  const person = ctx.person;
+  const [intent, setIntent] = useState(ctx.intent || (ctx.target ? "intro" : "view"));
+  const [channel, setChannel] = useState(() => lsGet("finn.channel") || "whatsapp");
+  const [variant, setVariant] = useState(0);
+  const [r, setR] = useState(null);
+  const [text, setText] = useState("");
+  const [subject, setSubject] = useState("");
+  const [busy, setBusy] = useState(true);
+  const [err, setErr] = useState(null);
+  const [step, setStep] = useState(null);   // null → "copied" / "opened" → "logged"
+  useEffect(() => {
+    let live = true;
+    setBusy(true); setErr(null);
+    post("/api/draft", { person_id: person.id, intent, channel, ticker: ctx.ticker, event_id: ctx.event_id, target_id: ctx.target?.id, variant })
+      .then((x) => { if (!live) return; setR(x); setText(x.text); setSubject(x.subject || ""); if (x.intent !== intent) setIntent(x.intent); })
+      .catch((e) => live && setErr(e.message)).finally(() => live && setBusy(false));
+    return () => { live = false; };
+  }, [intent, channel, variant]);
+  const pickChannel = (c) => { setChannel(c); lsSet("finn.channel", c); };
+  const copy = async () => { try { await navigator.clipboard.writeText(channel === "email" && subject ? `${subject}\n\n${text}` : text); } catch {} haptic(15); setStep("copied"); };
+  const openApp = () => setStep("opened");
+  const logged = async () => { await post("/api/people/todo/done", { id: ctx.todo || "", person_id: person.is_contact !== false ? person.id : null }).catch(() => {}); haptic(15); setStep("logged"); };
+  const intents = r?.intents || [{ id: intent, label: INTENT_LABEL[intent] }];
+  const over = channel === "linkedin" && text.length > 300;
+  return html`<div class="drafter">
+    <div class="person" style="align-items:center"><${Avatar} p=${person} />
+      <div style="min-width:0"><h2 style="margin:0;font-size:20px">Message to ${person.name}</h2>
+        <div class="phead">${ctx.target ? `About an intro to ${ctx.target.name}` : ctx.ticker ? `About ${ctx.ticker}` : person.headline || ""}</div></div></div>
+    <span class="field-l">What do you want?</span>
+    <div class="seg full wrap2" role="radiogroup" aria-label="What you want">${intents.map((x) => html`<button role="radio" aria-checked=${x.id === intent} class=${x.id === intent ? "on" : ""} onClick=${() => setIntent(x.id)}>${x.label}</button>`)}</div>
+    <span class="field-l">Send it on</span>
+    <div class="seg full" role="radiogroup" aria-label="Channel">${CHANNELS.map(([k, l]) => html`<button role="radio" aria-checked=${k === channel} class=${k === channel ? "on" : ""} onClick=${() => pickChannel(k)}>${l}</button>`)}</div>
+    <span class="field-l">Draft ${busy ? html`<span class="spin" style="width:11px;height:11px;vertical-align:-1px;margin-left:4px"></span>` : r ? html`<span class="muted">· ${r.source === "model" ? "written by the model from the facts below" : "from a template"}</span>` : ""}</span>
+    ${err && html`<div class="err" style="margin:0 0 8px">${err}</div>`}
+    ${channel === "email" && html`<input class="subj" value=${subject} onInput=${(e) => setSubject(e.target.value)} aria-label="Email subject" placeholder="Subject" />`}
+    <textarea class="draftbox" value=${text} onInput=${(e) => setText(e.target.value)} aria-label="Message" rows="7" disabled=${busy && !text}></textarea>
+    <div class="row tiny muted" style="margin-top:4px"><button class="linkish tiny" onClick=${() => setVariant(variant + 1)} disabled=${busy}>${Icon.refresh} Rewrite</button>
+      <span class=${over ? "neg" : ""}>${channel === "linkedin" ? `${text.length}/300` : `${text.length} characters`}</span></div>
+    ${r?.grounds?.length > 0 && html`<div class="callout" style="margin-top:10px"><span class="upper">Based on</span><ul class="grounds">${r.grounds.map((g) => html`<li>${g}</li>`)}</ul>
+      ${r.simulated && html`<div class="tiny muted" style="margin-top:4px">The news here is a simulated demo scenario.</div>`}</div>`}
+    <div class="row-btns sticky-actions">
+      <button class="btn sig" onClick=${copy} disabled=${!text}>${Icon.copy} ${step === "copied" ? "Copied" : "Copy"}</button>
+      ${channel === "whatsapp" && html`<a class="btn" href=${`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener" onClick=${openApp}>Open WhatsApp</a>`}
+      ${channel === "email" && html`<a class="btn" href=${`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`} onClick=${openApp}>Open mail</a>`}
+      ${channel === "linkedin" && html`<a class="btn" href="https://www.linkedin.com/messaging/" target="_blank" rel="noopener" onClick=${openApp}>Open LinkedIn</a>`}
+    </div>
+    ${step && step !== "logged" && html`<div class="callout"><div class="small">Sent it? Logging it restarts ${first(person.name)}'s keep-in-touch clock and clears the to-do.</div>
+      <div class="row-btns"><button class="btn pri" onClick=${logged}>I sent it</button><button class="btn" onClick=${close}>Not yet</button></div></div>`}
+    ${step === "logged" && html`<div class="callout sigc"><div class="small">Logged. ${first(person.name)} is off your to-do list.</div></div>`}
+    <p class="tiny muted" style="margin-top:10px">FINN never sends anything for you: it copies the text or opens your own app.</p>
+  </div>`;
+}
 function AskSheet({ q, openPerson, close }) {
   const [r, setR] = useState(null);
   useEffect(() => {
@@ -897,7 +1022,7 @@ function WhyPerson({ rec }) {
   </div>`;
 }
 
-function RecRow({ x, onPerson, compact }) {
+function RecRow({ x, onPerson, compact, draft }) {
   const [open, setOpen] = useState(false);
   return html`<div>
     <div class="person" style="cursor:pointer" onClick=${() => onPerson(x.person.id)}>
@@ -908,7 +1033,10 @@ function RecRow({ x, onPerson, compact }) {
         ${!compact && x.would_know && html`<div class="small ink2" style="margin-top:3px">Would know: ${x.would_know}</div>`}
       </div>
     </div>
-    ${x.contributions && html`<button class="linkish tiny whybtn" onClick=${() => setOpen(!open)}>${open ? "Hide" : `Why ${x.person.name.split(" ")[0]}? · ${Math.round(x.score * 100)}% match`}</button>`}
+    <div class="recfoot">
+      ${x.contributions && html`<button class="linkish tiny whybtn" onClick=${() => setOpen(!open)}>${open ? "Hide" : `Why ${first(x.person.name)}? · ${Math.round(x.score * 100)}% match`}</button>`}
+      ${draft && html`<button class="btn sm" onClick=${() => ui.openDraft({ person: x.person, intent: "view", ...draft })}>${Icon.draft} Draft</button>`}
+    </div>
     ${open && html`<${WhyPerson} rec=${x} />`}
   </div>`;
 }
@@ -916,14 +1044,42 @@ function RecRow({ x, onPerson, compact }) {
 // ---------------------------------------------------------------------------
 // Ask FINN: the agent chat
 // ---------------------------------------------------------------------------
-function md(text) {
+// A citation names the document it points at ("May 2026 call p.15"), not a bare number.
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function citeLabel(e) {
+  if (!e) return "source";
+  let c = (e.cite || e.title || "").replace(/^[A-Z][A-Z0-9&-]{1,19}\s+(?=\S)/, "");   // the ticker is already on screen
+  c = c.replace(/^reported financials.*$/i, "Financials").replace(/^(quarterly|annual|balance_sheet|cash_flow|ratios) statements$/i, (_, s) => `${s.replace("_", " ")} figures`)
+    .replace(/^results, (.+)$/i, "$1 results").replace(/^EOD (\d{4})-(\d{2})-(\d{2})$/, (_, y, m, d) => `Price, ${+d} ${MON[+m - 1]}`)
+    .replace(/^exchange filing, (\d{4})-(\d{2})-(\d{2})$/, (_, y, m, d) => `Filing, ${+d} ${MON[+m - 1]}`)
+    .replace(/, p\.(\d+)$/, " p.$1").replace(/^your network: (route via )?/, "").replace(/^profile: /, "").replace(/^web: /, "Web: ");
+  if (/^https?:/.test(c)) c = host(c);
+  c = c.charAt(0).toUpperCase() + c.slice(1);
+  return c.length > 26 ? c.slice(0, 25) + "…" : c;
+}
+// Where a source came from, in words an investor uses.
+function sourceKind(e) {
+  const c = e.cite || "";
+  if (e.source === "network") return "Your network";
+  if (e.source === "secondary") return "Web";
+  if (e.source === "market") return "Price";
+  if (/ call, p\.|\bcall\b/i.test(c)) return "Earnings call";
+  if (/annual report/i.test(c) || e.tool === "search_annual_report") return "Annual report";
+  if (/results/i.test(c)) return "Results";
+  if (/exchange filing/i.test(c)) return "Filing";
+  return "Financials";
+}
+
+function md(text, labels = {}) {
   const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const inline = (s) => esc(s)
     .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<i>$2</i>").replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\[(E\d+(?:\s*,\s*E?\d+)*)\]/g, (_, ids) => ids.split(/\s*,\s*/).map((id) => {
-      const k = id.startsWith("E") ? id : "E" + id;
-      return `<button class="cite" data-e="${k}" aria-label="source ${k}">${k.slice(1)}</button>`;
-    }).join(""));
+    .replace(/\[(E\d+(?:\s*,\s*E?\d+)*)\]/g, (_, ids) => {
+      const seen = new Set();
+      return ids.split(/\s*,\s*/).map((id) => (id.startsWith("E") ? id : "E" + id)).filter((k) => {
+        const l = labels[k] || k; if (seen.has(l)) return false; seen.add(l); return true;   // one chip per document
+      }).map((k) => `<button class="cite" data-e="${k}" aria-label="source: ${esc(labels[k] || k)}">${esc(labels[k] || k.slice(1))}</button>`).join("");
+    });
   let out = "", list = false, table = [];
   const flushTable = () => {
     if (!table.length) return;
@@ -985,23 +1141,29 @@ function applyEvent(r, ev) {
 
 const FLOW = [["understand", "Understand"], ["plan", "Plan"], ["execute", "Gather"], ["answer", "Answer"], ["verify", "Verify"], ["remember", "Remember"]];
 const argsLabel = (a) => Object.entries(a || {}).filter(([k]) => k !== "query").map(([, v]) => v).join(" · ") + (a?.query ? ` “${a.query.slice(0, 48)}${a.query.length > 48 ? "…" : ""}”` : "");
+const WORKING = { understand: "Working out what you're asking…", plan: "Deciding what to read…", execute: "Reading the filings, calls and numbers…",
+  answer: "Writing it up…", verify: "Checking every figure against the sources…", remember: "Wrapping up…" };
 
+// One quiet line ("Read 9 sources · checked 29 of 29 figures"); the machinery is one tap away, not in the answer.
 function RunTrace({ r, open, toggle }) {
   const last = {}, count = {};
   r.nodes.forEach((n) => { last[n.node] = n; count[n.node] = (count[n.node] || 0) + 1; });
+  const cur = r.nodes[r.nodes.length - 1];
+  const n = r.evidence?.length || 0;
   const summary = r.done
-    ? [r.plan && `${r.plan.length}-step plan`, r.evidence?.length && `${r.evidence.length} sources`,
-       r.verify && (r.verify.figures ? `${r.verify.supported}/${r.verify.figures} figures verified` : "nothing to verify"),
-       r.ms && `${(r.ms / 1000).toFixed(1)}s`].filter(Boolean).join(" · ")
-    : (r.nodes.length ? `${r.nodes[r.nodes.length - 1].label}…` : "Starting…");
-  return html`<div class="run">
+    ? [n ? `Read ${n} source${n === 1 ? "" : "s"}` : "Nothing to read",
+       r.verify?.figures ? `checked ${r.verify.supported} of ${r.verify.figures} figures` : null,
+       r.ms && `${Math.max(1, Math.round(r.ms / 1000))}s`].filter(Boolean).join(" · ")
+    : (cur && WORKING[cur.node]) || "Starting…";
+  return html`<div class="run ${r.done ? "done" : ""}">
     <button class="run-head" onClick=${toggle} aria-expanded=${open}>
-      <span class="flow">${FLOW.map(([k, l], i) => html`${i ? html`<span class="arrow">›</span>` : ""}<span class="fnode ${last[k]?.status || "idle"}" title=${last[k]?.detail || ""}>${l}${count[k] > 1 ? html`<sup>×${count[k]}</sup>` : ""}</span>`)}</span>
-      <span class="tiny muted">${summary}</span>
+      <span class="run-line">${!r.done && html`<span class="spin"></span>`}<span>${summary}</span></span>
+      <span class="tiny muted">${open ? "Hide" : "How I got this"}</span>
     </button>
     ${open && html`<div class="run-body">
-      ${r.nodes.map((n) => html`<div class="rn"><span class="rdot ${n.status}"></span><b>${n.label}</b> <span class="muted">${n.detail || (n.status === "running" ? "…" : "")}</span>${n.ms != null ? html` <span class="tiny muted num">${n.ms} ms</span>` : ""}</div>`)}
-      ${r.plan && html`<div class="steps"><div class="tiny muted upper" style="margin-bottom:4px">Plan · ${r.planSource === "model" ? "by the model" : "rule planner"}</div>${r.plan.map((st) => {
+      <span class="flow" style="margin:6px 0 8px">${FLOW.map(([k, l], i) => html`${i ? html`<span class="arrow">›</span>` : ""}<span class="fnode ${last[k]?.status || "idle"}" title=${last[k]?.detail || ""}>${l}${count[k] > 1 ? html`<sup>×${count[k]}</sup>` : ""}</span>`)}</span>
+      ${r.nodes.map((x) => html`<div class="rn"><span class="rdot ${x.status}"></span><b>${x.label}</b> <span class="muted">${x.detail || (x.status === "running" ? "…" : "")}</span>${x.ms != null ? html` <span class="tiny muted num">${x.ms} ms</span>` : ""}</div>`)}
+      ${r.plan?.length > 0 && html`<div class="steps"><div class="tiny muted upper" style="margin-bottom:4px">What I read · ${r.planSource === "model" ? "planned by the model" : "rule planner"}</div>${r.plan.map((st) => {
         const s = r.steps[st.id] || {};
         return html`<div class="step"><span class="rdot ${s.status === "done" ? "end" : s.status === "error" ? "error" : "running"}"></span><code>${st.tool}</code> <span class="muted small">${argsLabel(st.args)}</span>
           ${s.status === "done" ? html` <span class="tiny muted">${s.n} item${s.n === 1 ? "" : "s"}</span>` : s.status === "error" ? html` <span class="tiny neg">${s.error}</span>` : ""}
@@ -1015,7 +1177,7 @@ const SRC = { primary: "Primary", computed: "Computed", market: "Market", networ
 
 function EvidenceCard({ e, onClose, openPerson }) {
   return html`<div class="evcard">
-    <div class="meta"><span class="src ${e.source}">${SRC[e.source] || e.source}</span><b>${e.id}</b><span>${e.cite}</span>
+    <div class="meta"><span class="src ${e.source}">${sourceKind(e)}</span><span>${e.cite}</span>
       ${e.url && html`<a class="linkish" href=${e.url} target="_blank" rel="noopener">open ↗</a>`}
       <button class="linkish" style="margin-left:auto" onClick=${onClose}>close</button></div>
     <div class="evtitle">${e.title}</div>
@@ -1025,33 +1187,50 @@ function EvidenceCard({ e, onClose, openPerson }) {
   </div>`;
 }
 
+// "ETERNAL filing: Shareholders Letter" → "Shareholders Letter"; the ticker is already on screen.
+const noTicker = (s) => { s = (s || "").replace(/^[A-Z][A-Z0-9&-]{1,19}\s+(?:filing:\s*)?/, ""); return s.charAt(0).toUpperCase() + s.slice(1); };
+
+function SourceRow({ e, onOpen, open }) {
+  return html`<div class="srow ${open ? "on" : ""}" role="button" tabindex="0" onClick=${() => onOpen(e.id)} onKeyDown=${(k) => k.key === "Enter" && onOpen(e.id)}>
+    <span class="skind">${sourceKind(e)}</span>
+    <span class="sname">${sourceKind(e) === "Filing" ? `${noTicker(e.title)} · ${citeLabel(e).replace(/^Filing, /, "")}` : noTicker(e.cite || e.title)}</span>
+    ${e.url ? html`<a class="sopen" href=${e.url} target="_blank" rel="noopener" aria-label=${`Open ${e.cite || "source"}`} onClick=${(x) => x.stopPropagation()}>↗</a>` : html`<span></span>`}
+  </div>`;
+}
+
 function Turn({ r, onFollow, openPerson }) {
   const [openEv, setOpenEv] = useState(null);
-  const [trace, setTrace] = useState(true);
-  const [srcOpen, setSrcOpen] = useState(false);
-  useEffect(() => { if (r.done) setTrace(false); }, [r.done]);
-  const ev = (r.evidence || []).find((x) => x.id === openEv);
-  const people = (r.evidence || []).filter((x) => x.source === "network" && x.graph);
-  const counts = (r.evidence || []).reduce((m, x) => ({ ...m, [x.source]: (m[x.source] || 0) + 1 }), {});
+  const [trace, setTrace] = useState(false);
+  const [more, setMore] = useState(false);
+  const evs = r.evidence || [];
+  const byId = Object.fromEntries(evs.map((e) => [e.id, e]));
+  const labels = Object.fromEntries(evs.map((e) => [e.id, citeLabel(e)]));
+  const ev = byId[openEv];
+  // The sources the answer actually cites, in the order it cites them; the rest were read but not used.
+  const cited = r.answer ? [...new Set([...r.answer.text.matchAll(/\[(E\d+(?:\s*,\s*E?\d+)*)\]/g)]
+    .flatMap((m) => m[1].split(/\s*,\s*/).map((id) => (id.startsWith("E") ? id : "E" + id))))].filter((id) => byId[id]) : [];
+  const unused = evs.filter((e) => !cited.includes(e.id));
+  const people = evs.filter((x) => x.source === "network" && x.graph);
+  const toggleEv = (id) => setOpenEv(id === openEv ? null : id);
   return html`<div class="turn">
     <div class="bubble">${r.q}</div>
     <${RunTrace} r=${r} open=${trace} toggle=${() => setTrace(!trace)} />
     ${r.answer && html`<div class="answer">
-      <div class="md" onClick=${(e) => { const b = e.target.closest(".cite"); if (b) setOpenEv(b.dataset.e === openEv ? null : b.dataset.e); }}
-        dangerouslySetInnerHTML=${{ __html: md(r.answer.text) }}></div>
+      <div class="md" onClick=${(e) => { const b = e.target.closest(".cite"); if (b) toggleEv(b.dataset.e); }}
+        dangerouslySetInnerHTML=${{ __html: md(r.answer.text, labels) }}></div>
       ${ev && html`<${EvidenceCard} e=${ev} onClose=${() => setOpenEv(null)} openPerson=${openPerson} />`}
-      ${people.length > 0 && html`<div class="people-strip">${people.slice(0, 3).map((p) => html`<button class="pchip" onClick=${() => setOpenEv(p.id)}><${Avatar} p=${p.person || { name: p.title.replace(/^.*?: /, "") }} /><span>${(p.person?.name || p.title).split(" ")[0]}</span></button>`)}<span class="tiny muted">tap to see why</span></div>`}
-      <div class="answer-meta">
-        ${r.verify && html`<span class=${`vbadge ${r.verify.ok ? "ok" : "warn"}`} title=${r.verify.ok ? "" : [...r.verify.unsupported, ...r.verify.uncited].join(" · ")}>
-          ${r.verify.ok ? "✓" : "!"} ${r.verify.figures ? `${r.verify.supported}/${r.verify.figures} figures traced to sources` : "grounded in sources"}${r.verify.ok ? "" : ` · ${r.verify.unsupported.length + r.verify.uncited.length} to check`}</span>`}
-        <span class="chip">${r.answer.confidence} confidence</span>
-        <span class="tiny muted">${r.answer.mode === "model" ? "written from evidence" : "extractive · model offline"}</span>
-      </div>
-      <button class="linkish small" onClick=${() => setSrcOpen(!srcOpen)}>${srcOpen ? "Hide" : "Show"} ${r.evidence?.length || 0} sources</button>
-      <span class="tiny muted"> ${Object.entries(counts).map(([k, v]) => `${v} ${SRC[k]?.toLowerCase() || k}`).join(" · ")}</span>
-      ${srcOpen && html`<div class="srclist">${r.evidence.map((x) => html`<button class="srcrow" onClick=${() => setOpenEv(x.id)}><span class="src ${x.source}">${x.id}</span><span>${x.title}</span><span class="tiny muted">${x.cite}</span></button>`)}</div>`}
-      ${r.answer.follow_ups?.length > 0 && r.done && html`<div class="suggest wrap">${r.answer.follow_ups.map((f) => html`<button onClick=${() => onFollow(f)}>${f}</button>`)}</div>`}
-      ${r.learned?.length > 0 && html`<div class="tiny muted" style="margin-top:6px">Remembered for next time: ${r.learned.join("; ")}</div>`}
+      ${people.length > 0 && html`<div class="people-strip">${people.slice(0, 3).map((p) => html`<button class="pchip" onClick=${() => toggleEv(p.id)}><${Avatar} p=${p.person || { name: p.title.replace(/^.*?: /, "") }} /><span>${(p.person?.name || p.title).split(" ")[0]}</span></button>`)}<span class="tiny muted">tap to see why</span></div>`}
+      ${evs.length > 0 && html`<div class="srcbox">
+        <div class="srcbox-h"><span class="upper">${cited.length ? "Sources I used" : "What I read"}</span>
+          ${r.verify && html`<span class=${`vbadge ${r.verify.ok ? "ok" : "warn"}`} title=${r.verify.ok ? "" : [...r.verify.unsupported, ...r.verify.uncited].join(" · ")}>
+            ${r.verify.ok ? "✓" : "!"} ${r.verify.figures ? `${r.verify.supported} of ${r.verify.figures} figures checked` : "grounded in these sources"}${r.verify.ok ? "" : ` · ${r.verify.unsupported.length + r.verify.uncited.length} to check`}</span>`}</div>
+        ${(cited.length ? cited.map((id) => byId[id]) : evs).map((e) => html`<${SourceRow} key=${e.id} e=${e} open=${openEv === e.id} onOpen=${toggleEv} />`)}
+        ${cited.length > 0 && unused.length > 0 && html`<button class="linkish small" onClick=${() => setMore(!more)}>${more ? "Hide the rest" : `Also read ${unused.length} more`}</button>
+          ${more && unused.map((e) => html`<${SourceRow} key=${e.id} e=${e} open=${openEv === e.id} onOpen=${toggleEv} />`)}`}
+        ${r.answer.confidence && r.answer.confidence !== "high" && html`<div class="tiny muted" style="margin-top:6px">I'm ${r.answer.confidence === "low" ? "not confident" : "only fairly confident"} in this: the sources are thin.</div>`}
+      </div>`}
+      ${r.answer.follow_ups?.length > 0 && r.done && html`<div class="section-h" style="margin-top:14px"><h2>Ask next</h2></div><div class="suggest wrap" style="padding-top:0">${r.answer.follow_ups.map((f) => html`<button onClick=${() => onFollow(f)}>${f}</button>`)}</div>`}
+      ${r.learned?.length > 0 && html`<div class="tiny muted" style="margin-top:6px">I'll remember: ${r.learned.join("; ")}</div>`}
     </div>`}
     ${r.error && html`<div class="err" style="margin:8px 0">${r.error}</div>`}
   </div>`;
@@ -1093,14 +1272,14 @@ function ChatView({ params, openPerson }) {
       <button class="iconbtn" title="New conversation" onClick=${() => { tid.current = null; setTurns([]); }}>${Icon.plus}</button></div>
     ${ctx?.title && html`<div class="pinned">About: ${ctx.title}</div>`}
     ${!turns.length && html`<div class="section">
-      <div class="hero" style="padding:4px 0 10px"><h1 style="font-size:28px">Ask anything. It shows its work.</h1>
-        <p>FINN plans which sources to read, gathers evidence from filings, transcripts, financials, your network${info?.tools?.some((x) => x.name === "web_search") ? " and the web" : ""}, then answers with every figure traced to a source.</p></div>
-      ${info && html`<div class="card"><span class="upper muted">How FINN answers</span><${AgentGraph} g=${info.graph} /></div>`}
+      <div class="hero" style="padding:4px 0 10px"><h1 style="font-size:26px">Ask me anything about your companies.</h1>
+        <p>I read the filings, earnings calls, financials and your network${info?.tools?.some((x) => x.name === "web_search") ? ", and the web when it helps" : ""}, then answer with every figure tied to the document it came from.</p></div>
+      ${info && html`<div class="card"><span class="upper muted">How I answer</span><${AgentGraph} g=${info.graph} /></div>`}
       <div class="suggest wrap">${sugg.map((s) => html`<button onClick=${() => send(s)}>${s}</button>`)}</div>
-      ${info?.facts?.length > 0 && html`<div class="card"><span class="upper muted">What FINN remembers about you</span>
+      ${info?.facts?.length > 0 && html`<div class="card"><span class="upper muted">What I remember about you</span>
         ${info.facts.map((f) => html`<div class="rline" style="grid-template-columns:1fr auto"><span class="small">${f.text}</span>
           <button class="linkish tiny" onClick=${async () => setInfo({ ...info, ...(await api(`/api/agent/memory/${f.id}`, { method: "DELETE" })) })}>forget</button></div>`)}</div>`}
-      ${info && !info.model.enabled && html`<p class="tiny muted">No model key configured: FINN runs its rule planner and quotes the sources instead of writing prose.</p>`}
+      ${info && !info.model.enabled && html`<p class="tiny muted">No model key configured: I plan with rules and quote the sources instead of writing them up.</p>`}
     </div>`}
     <div class="section">${turns.map((r, i) => html`<${Turn} key=${i} r=${r} onFollow=${send} openPerson=${openPerson} />`)}<div ref=${endRef}></div></div>
     <div class="dock"><div class="dock-inner">
@@ -1130,24 +1309,13 @@ function AgentGraph({ g }) {
 }
 
 // ---------------------------------------------------------------------------
-// Ask dock + App
+// Tabs + App
 // ---------------------------------------------------------------------------
-const SUGGESTIONS = ["How is Dixon's margin holding up, and why?", "Who can intro me to the new CFO of Deepak Nitrite?", "NAVINFLUOR", "Who should I call about Laurus Labs?", "What did PI Industries guide for FY27?", "SRF"];
+const TABS = [["/", "radar", "Radar"], ["/research", "research", "Research"], ["/people", "people", "People"]];
 
-function Dock({ tab, onAsk }) {
-  const [q, setQ] = useState("");
-  const [focus, setFocus] = useState(false);
-  const submit = (text) => { const t = (text ?? q).trim(); if (!t) return; onAsk(t); setQ(""); setFocus(false); document.activeElement?.blur(); };
-  return html`<div class="dock"><div class="dock-inner">
-    ${focus && html`<div class="suggest">${SUGGESTIONS.map((s) => html`<button onMouseDown=${(e) => { e.preventDefault(); submit(s); }}>${s}</button>`)}</div>`}
-    <form class="ask" onSubmit=${(e) => { e.preventDefault(); submit(); }}>
-      <input value=${q} onInput=${(e) => setQ(e.target.value)} onFocus=${() => setFocus(true)} onBlur=${() => setTimeout(() => setFocus(false), 120)}
-        placeholder="Ask FINN: a ticker, a theme, a person" aria-label="Ask FINN" enterkeyhint="go" autocomplete="off" />
-      <button class="go" type="submit" aria-label="Ask">${Icon.arrow}</button>
-    </form>
-    <nav class="tabs">${[["/", "brief", "Brief"], ["/portfolio", "portfolio", "Portfolio"], ["/network", "network", "Network"]].map(([p, k, l]) =>
-      html`<button class=${tab === k ? "on" : ""} onClick=${() => go(p)}>${Icon[k]}<span>${l}</span></button>`)}</nav>
-  </div></div>`;
+function TabBar({ tab }) {
+  return html`<div class="dock"><div class="dock-inner"><nav class="tabs" aria-label="Sections">${TABS.map(([p, k, l]) =>
+    html`<button class=${tab === k ? "on" : ""} aria-current=${tab === k ? "page" : null} onClick=${() => go(p)}>${Icon[k]}<span>${l}</span></button>`)}</nav></div></div>`;
 }
 
 function useRoute() {
@@ -1161,26 +1329,37 @@ function App() {
   const [sheet, setSheet] = useState(null);
   const [rulesVersion, setRulesVersion] = useState(0);
   const openPerson = (id, ctx) => setSheet({ kind: "person", id, ctx });
+  const openDraft = (ctx) => setSheet({ kind: "draft", ctx });
+  ui.openPerson = openPerson;
+  ui.openDraft = openDraft;
   // One word (a ticker or a name) is a lookup; anything longer is a question for the agent.
   const openAsk = (q) => (/^\s*[A-Za-z0-9&.\-]{2,20}\s*$/.test(q) ? setSheet({ kind: "ask", q }) : go(`/chat?q=${encodeURIComponent(q)}`));
   const close = () => setSheet(null);
+  useEffect(() => {   // old routes and push-notification deep links
+    if (route.startsWith("/portfolio")) go("/");
+    else if (route.startsWith("/network")) go("/people");
+    const pm = route.match(/^\/p\/([\w:.-]+)/);
+    if (pm) { go("/people"); openPerson(pm[1]); }
+  }, [route]);
   const m = route.match(/^\/c\/([A-Za-z0-9&\-]+)/);
   const chat = route.startsWith("/chat");
-  const tab = route.startsWith("/portfolio") ? "portfolio" : route.startsWith("/network") ? "network" : m || chat ? "" : "brief";
+  const held = m && (!radarCache || radarCache.tiles.some((t) => t.ticker === m[1].toUpperCase()));
+  const tab = route.startsWith("/research") ? "research" : route.startsWith("/people") || route.startsWith("/p/") ? "people" : m ? (held ? "radar" : "research") : "radar";
+  useEffect(() => { if (!m && !chat) window.scrollTo(0, 0); }, [route.split("?")[0]]);   // a tab opens at its top
   return html`<div class="app">
     ${chat ? html`<${ChatView} key=${route} params=${Object.fromEntries(new URLSearchParams(route.split("?")[1] || ""))} openPerson=${openPerson} />`
-      : m ? html`<${DossierView} ticker=${m[1].toUpperCase()} openPerson=${openPerson} />`
-      : tab === "portfolio" ? html`<${PortfolioView} />`
-      : tab === "network" ? html`<${NetworkView} openPerson=${openPerson} openAsk=${openAsk} />`
-      : html`<${BriefView} openPerson=${openPerson} openRules=${() => setSheet({ kind: "rules" })} rulesVersion=${rulesVersion} />`}
-    ${!chat && html`<${Dock} tab=${tab} onAsk=${openAsk} />`}
-    ${sheet && html`<${Sheet} onClose=${close}>
+      : m ? html`<${HoldingView} key=${m[1]} ticker=${m[1].toUpperCase()} openPerson=${openPerson} />`
+      : tab === "research" ? html`<${ResearchView} openAsk=${openAsk} />`
+      : tab === "people" ? html`<${PeopleView} openPerson=${openPerson} openAsk=${openAsk} />`
+      : html`<${RadarView} openRules=${() => setSheet({ kind: "rules" })} rulesVersion=${rulesVersion} />`}
+    ${!chat && html`<${TabBar} tab=${tab} />`}
+    ${sheet && html`<${Sheet} key=${sheet.kind + (sheet.id || "")} onClose=${close}>
       ${sheet.kind === "person" && html`<${PersonSheet} id=${sheet.id} ctx=${sheet.ctx} openPerson=${openPerson} />`}
+      ${sheet.kind === "draft" && html`<${DraftSheet} ctx=${sheet.ctx} close=${close} />`}
       ${sheet.kind === "ask" && html`<${AskSheet} q=${sheet.q} openPerson=${openPerson} close=${close} />`}
       ${sheet.kind === "rules" && html`<${RulesSheet} onSaved=${() => { close(); setRulesVersion((v) => v + 1); }} />`}
     <//>`}
   </div>`;
 }
-
 registerSW();
 render(html`<${App} />`, document.getElementById("app"));

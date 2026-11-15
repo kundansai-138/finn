@@ -6,7 +6,7 @@
 //   - text under 11 px
 //   - inputs under 16 px (iOS Safari zooms the page when they get focus)
 //   - PWA basics: viewport meta, manifest, service worker
-async function finnMobileAudit(routes = ["/", "/c/DIXON", "/chat", "/network", "/portfolio"]) {
+async function finnMobileAudit(routes = ["/", "/c/DEEPAKNTR", "/c/DIXON", "/research", "/people", "/chat"]) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const out = { width: innerWidth, screens: {} };
   for (const route of routes) {

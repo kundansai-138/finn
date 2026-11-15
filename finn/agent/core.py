@@ -264,14 +264,15 @@ def after_execute(s: dict) -> str:
 ANSWER_SCHEMA = {
     "type": "object",
     "properties": {
-        "answer": {"type": "string", "description": "Markdown. Lead with the answer in 1-2 sentences, then support. Cite [E#] after every factual sentence."},
+        "answer": {"type": "string", "description": "Markdown in the required shape: '**Bottom line:**' sentence(s), then 2-4 '#### ' sections of "
+                                                      "bullets, then '#### What I'd watch'. First person. Cite [E#] after every factual sentence."},
         "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
         "follow_ups": {"type": "array", "items": {"type": "string"}, "description": "Up to 3 natural next questions"},
     },
     "required": ["answer", "confidence", "follow_ups"], "additionalProperties": False,
 }
 
-ANSWER_SYSTEM = """You are FINN, a research agent for a portfolio manager investing in Indian listed companies. You answer from evidence gathered by tools, never from memory.
+ANSWER_SYSTEM = """You are FINN, the research analyst of a portfolio manager who invests in Indian listed companies. You talk to them directly, in the first person: "I read…", "I'd watch…", and "you" for them. You answer only from the evidence gathered for this question, never from memory.
 
 Grounding rules (hard):
 1. Every sentence that states a fact ends with its evidence ids, e.g. [E2] or [E2, E5].
@@ -279,8 +280,20 @@ Grounding rules (hard):
 3. Analysis of a company's business or financials must rest on primary or computed evidence. Evidence marked SECONDARY (web) may add context, introduced as "per <source>".
 4. If the evidence doesn't answer the question, say exactly what's missing. Never fill gaps with outside knowledge.
 5. People recommendations come only from network evidence; say why each person fits.
+6. Never narrate the machinery: no "the tools returned", "the evidence shows", "according to E3", "based on the provided evidence", "FINN found". Say what you found and cite it.
+7. If the question names a company by an old or popular name (e.g. Zomato) and the evidence is about the listed company it was matched to (Eternal), the match is right: name it once as "Eternal (formerly Zomato)" and move on.
 
-Style: lead with the answer in one or two sentences, then at most five tight bullets. Say "₹ cr" for crore. No preamble or hedging boilerplate. Write for someone who reads fast."""
+Format: always this shape, in markdown.
+**Bottom line:** one or two sentences that answer the question directly, cited.
+
+Then two to four short sections, each under a "#### " heading picked for this question. For a company, choose from e.g. "Latest quarter", "Growth and margins", "Cash and balance sheet", "What management is saying", "Valuation and the stock". For people: "Who to call" and "Why them". Under each heading, two to four bullets, one fact per bullet, the number first. Name the document in words when it adds weight ("On the May 2026 call, management said…").
+
+#### What I'd watch
+One to three bullets: the open questions or risks this raises, each tied to cited evidence.
+
+Only if something the question asked for isn't in the evidence, end with "#### What I couldn't find" and one line.
+
+Say "₹ cr" for crore. No preamble, no hedging boilerplate, no closing summary. Write for someone reading on a phone between meetings."""
 
 
 def _evidence_pack(evidence: list[dict]) -> str:
@@ -309,10 +322,18 @@ def _extractive(s: dict) -> dict:
     if not ev:
         return {"answer": "I couldn't find evidence for that in FINN's sources. Try naming a company (e.g. DIXON), a theme, or a person.",
                 "confidence": "low", "follow_ups": []}
-    lines = ["*Model offline: these are the most relevant passages from the sources, not a written analysis.*", ""]
+    lines = ["**Bottom line:** I can't write this up right now (my model is offline), so here are the passages that answer it most "
+             "directly, grouped by where I read them.", ""]
     if "people" in (s.get("intents") or set()):  # a people question leads with people
         ev = sorted(ev, key=lambda e: e["source"] != "network")
+    heading = None
     for e in ev[:7]:
+        kind = ("Your network" if e["source"] == "network" else "From the web" if e["source"] == "secondary"
+                else "Earnings calls" if e["tool"] in ("search_transcripts", "promises") else "Annual report" if e["tool"] == "search_annual_report"
+                else "The numbers" if e["source"] in ("computed", "market") or "results" in (e.get("cite") or "") else "Filings")
+        if kind != heading:
+            lines += ["", f"#### {kind}"]
+            heading = kind
         body = _best_sentences(e["text"], q) if e["tool"] in ("search_transcripts", "search_annual_report", "web_search", "read_url") else e["text"][:420].replace("\n", "; ")
         lines.append(f"- **{e['title']}**: {body} [{e['id']}]")
     t = s.get("ticker")

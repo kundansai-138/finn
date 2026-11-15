@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from . import ask as ask_mod
 from . import clock, db, portfolio, pull, push, scheduler, store
 from . import enrich as web_enrich
+from . import radar as radar_mod
 from .context import DEFAULT_USER, current_user, reset_user, set_user
 from .config import WEB
 from .http import FetchError
@@ -149,6 +150,40 @@ def ask(q: str) -> dict[str, Any]:
     return ask_mod.ask(q)
 
 
+@app.get("/api/radar")
+def radar_view(window: str = Query("24h", pattern="^(24h|3d|7d|30d)$")) -> dict[str, Any]:
+    """Home screen: every holding as a tile, and the few that need a look."""
+    return radar_mod.radar(window)
+
+
+@app.get("/api/people/todo")
+def people_todo(window: str = Query("7d", pattern="^(24h|3d|7d|30d)$")) -> dict[str, Any]:
+    """Who to contact now, verb first: news-driven calls, then keep-in-touch nudges."""
+    return radar_mod.todo(window)
+
+
+@app.post("/api/people/todo/done")
+def people_todo_done(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    out = radar_mod.todo_done(str(body.get("id") or ""), body.get("person_id"))
+    if out["touched"]:
+        _network_changed()
+    return out
+
+
+@app.post("/api/draft")
+def draft_message(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """A first message to someone in the network; FINN drafts, the investor sends it themselves."""
+    from .network import drafter
+
+    try:
+        return drafter.draft(str(body.get("person_id") or ""), intent=body.get("intent") or "view",
+                             channel=body.get("channel") or "whatsapp", ticker=body.get("ticker"),
+                             event_id=body.get("event_id"), target_id=body.get("target_id"),
+                             variant=int(body.get("variant") or 0))
+    except KeyError:
+        raise HTTPException(404, "Unknown person")
+
+
 @app.get("/api/people/{pid}")
 def person(pid: str) -> dict[str, Any]:
     net = graph.get()
@@ -157,6 +192,12 @@ def person(pid: str) -> dict[str, Any]:
     full = net.person_full(pid)
     if full.get("paths"):
         reco.with_graphs(net, full["paths"], pid)
+    if pid in net.contacts:   # why get in touch now, if anything says so
+        try:
+            n = next((x for x in nudges.compute(include_all=True) if x["person"]["id"] == pid), None)
+            full["nudge"] = {k: n[k] for k in ("reason", "due", "hook", "days_since", "cadence_days")} if n else None
+        except Exception as e:
+            logging.warning("nudge for %s failed: %s", pid, e)
     return full
 
 

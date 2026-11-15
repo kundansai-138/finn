@@ -1,7 +1,7 @@
 // FINN service worker: installable, fast to open, readable offline, and the receiver for push alerts.
 //
 //   app shell (html, js, css, icons)  cache-first, refreshed in the background
-//   /api/brief, /api/portfolio        network-first; offline → last good copy, flagged as offline
+//   /api/radar, /api/brief, /api/portfolio, /api/network, /api/people/todo  network-first; offline → last good copy, flagged as offline
 //   /api/company/*                    stale-while-revalidate (dossiers change slowly)
 //   everything else (chat stream, writes)  network only
 const VERSION = "finn-v3";
@@ -30,7 +30,7 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
   const path = url.pathname;
 
-  if (path.startsWith("/api/brief") || path.startsWith("/api/portfolio") || path.startsWith("/api/network")) {
+  if (path.startsWith("/api/radar") || path.startsWith("/api/brief") || path.startsWith("/api/portfolio") || path.startsWith("/api/network") || path.startsWith("/api/people/todo")) {
     e.respondWith(fetch(e.request).then((r) => {
       if (r.ok) caches.open(VERSION).then((c) => c.put(e.request, r.clone()));
       return r;

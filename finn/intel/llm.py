@@ -32,6 +32,19 @@ from ..config import LLM_ENABLED as _ENV_ON  # the server has a key and FINN_LLM
 from . import gemini, providers
 
 log = logging.getLogger(__name__)
+
+# Why the last model call in this request produced nothing (rate limit, API error, refusal, bad JSON...).
+# Captured from this module's own warnings, so every failure path is covered without threading it through.
+_last_err: contextvars.ContextVar[str] = contextvars.ContextVar("finn_model_err", default="")
+
+
+class _Capture(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.levelno >= logging.WARNING:
+            _last_err.set(record.getMessage())
+
+
+log.addHandler(_Capture())
 LLM_ENABLED = _ENV_ON   # the server key; enabled() is the live answer, including a visitor's own key
 
 # Response cache (sha256 of the full request -> output). On by default; evals that measure model
@@ -185,6 +198,22 @@ def _key_rejected(purpose: str, e: Exception) -> None:
 
 def enabled() -> bool:
     return available()
+
+
+def clear_error() -> None:
+    _last_err.set("")
+
+
+def failure() -> dict[str, Any]:
+    """Why no model answer is available for this request, in words a visitor can act on."""
+    c = _creds()
+    if not c:
+        return {"reason": "no_key", "provider": None, "visitor": False, "detail": ""}
+    label = providers.PROVIDERS.get(c.provider, {}).get("label", c.provider)
+    until, err = _down.get(_kid(c.key), (0.0, ""))
+    if time.time() < until:
+        return {"reason": "rejected", "provider": label, "visitor": c.visitor, "detail": err}
+    return {"reason": "error", "provider": label, "visitor": c.visitor, "detail": _last_err.get() or "the model returned no answer"}
 
 
 def models() -> dict[str, str | None]:

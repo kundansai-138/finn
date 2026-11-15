@@ -450,12 +450,32 @@ def _decline(s: dict) -> dict:
     return {"answer": text, "confidence": "high", "follow_ups": fu[:3]}
 
 
+def _no_model() -> dict:
+    """The model couldn't answer: say exactly why, and nothing else. FINN doesn't pass off raw passages as an answer."""
+    f = llm.failure()
+    who = "The API key you provided" if f["visitor"] else "FINN's shared API key"
+    raw = f["detail"] or ""
+    m = re.search(r"""['"]message['"]\s*:\s*['"]([^'"]+)""", raw)   # the provider's own words, not its JSON envelope
+    detail = re.sub(r"\s+", " ", m.group(1) if m else raw).strip().rstrip(".")[:200]
+    if f["reason"] == "no_key":
+        text = ("No AI model is connected, so I can't write this answer. Connect your API key (Anthropic, Gemini, OpenAI "
+                "or any OpenAI-compatible provider) and ask again.")
+    elif f["reason"] == "rejected":
+        text = (f"{who} ({f['provider']}) was rejected, so I can't get you this answer. "
+                + (f"The provider said: {detail}. " if detail else "") + "Check the key, or connect a different one.")
+    else:
+        text = (f"{who} ({f['provider']}) couldn't produce this answer. "
+                + (f"The provider said: {detail}. " if detail else "") + "Try again, or choose a different model.")
+    return {"answer": text, "confidence": "low", "follow_ups": [], "reason": f["reason"]}
+
+
 def answer(s: dict, emit) -> dict:
     ev = s.get("evidence") or []
     out, mode = None, "extractive"
     if s.get("plan_source") == "declined":
         out, mode = _decline(s), "declined"
     elif (LLM_ENABLED or llm.enabled()) and ev:
+        llm.clear_error()
         t = s["thread"]
         system = ANSWER_SYSTEM + f"\n\nInvestor's standing preferences (tailor emphasis to these):\n{s.get('facts') or memory.facts_block()}"
         if t.get("summary"):
@@ -477,10 +497,14 @@ def answer(s: dict, emit) -> dict:
         if res:
             res = {**res, "answer": show(res["answer"]), "follow_ups": [show(f) for f in res.get("follow_ups", [])]}
             out, mode = res, "model"
-    if out is None:
-        out = _extractive(s)
-    emit({"type": "answer", "text": out["answer"], "confidence": out["confidence"], "follow_ups": out.get("follow_ups", [])[:3], "mode": mode})
-    s["_detail"] = {"model": "written by model", "declined": "declined: out of scope"}.get(mode, "extractive (model offline)")
+    if out is None and not ev:
+        out = _extractive(s)   # nothing found: say so (no model needed for that)
+    elif out is None:
+        out, mode = _no_model(), "no_model"
+    emit({"type": "answer", "text": out["answer"], "confidence": out["confidence"], "follow_ups": out.get("follow_ups", [])[:3], "mode": mode,
+          "reason": out.get("reason")})
+    s["_detail"] = {"model": "written by model", "declined": "declined: out of scope",
+                    "no_model": f"no answer: {out.get('reason')}"}.get(mode, "nothing found")
     return {"answer": out, "answer_mode": mode}
 
 
@@ -488,6 +512,11 @@ def answer(s: dict, emit) -> dict:
 # Node: verify (+ one repair pass)
 # ---------------------------------------------------------------------------
 def verify_node(s: dict, emit) -> dict:
+    if s.get("answer_mode") == "no_model":   # a message about the key, not an answer: nothing to verify
+        v = {"ok": True, "figures": 0, "supported": 0, "derived": 0, "unsupported": [], "uncited": [], "unknown_citations": []}
+        emit({"type": "verify", **v})
+        s["_detail"] = "no answer to check"
+        return {"verification": v}
     v = verify.check(s["answer"]["answer"], s.get("evidence") or [])
     emit({"type": "verify", **v})
     s["_detail"] = (f"{v['supported']}/{v['figures']} figures traced to sources" if v["figures"] else "no figures to check") + \

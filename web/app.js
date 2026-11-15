@@ -10,10 +10,10 @@ const MK = "finn.model", MK_SKIP = "finn.model.skip";
 const modelKey = {
   cfg: () => { try { const c = JSON.parse(localStorage.getItem(MK) || "null"); return c && c.key ? c : null; } catch { return null; } },
   get: () => modelKey.cfg()?.key || "",
-  set: (c) => { try { localStorage.setItem(MK, JSON.stringify(c)); localStorage.removeItem(MK_SKIP); } catch {} },
+  set: (c) => { try { localStorage.setItem(MK, JSON.stringify(c)); sessionStorage.removeItem(MK_SKIP); sessionStorage.setItem("finn.model.ok", "1"); } catch {} },
   clear: () => { try { localStorage.removeItem(MK); } catch {} },
-  skipped: () => { try { return localStorage.getItem(MK_SKIP) === "1"; } catch { return false; } },
-  skip: () => { try { localStorage.setItem(MK_SKIP, "1"); } catch {} },
+  skipped: () => { try { return sessionStorage.getItem(MK_SKIP) === "1"; } catch { return false; } },
+  skip: () => { try { sessionStorage.setItem(MK_SKIP, "1"); } catch {} },
   label: (c) => `${c.label || c.provider} · ${c.deep}${c.fast !== c.deep ? ` + ${c.fast}` : ""} · key ••••${c.key.slice(-4)}`,
 };
 {
@@ -1301,7 +1301,10 @@ function Turn({ r, onFollow, openPerson }) {
   return html`<div class="turn">
     <div class="bubble">${r.q}</div>
     <${RunTrace} r=${r} open=${trace} toggle=${() => setTrace(!trace)} />
-    ${r.answer && html`<div class="answer">
+    ${r.answer?.mode === "no_model" && html`<div class="answer"><div class="nomodel">
+      <p>${r.answer.text}</p>
+      <button class="btn sig" onClick=${() => ui.openSheet({ kind: "modelkey" })}>${modelKey.cfg() ? "Change AI model" : "Connect AI model"}</button></div></div>`}
+    ${r.answer && r.answer.mode !== "no_model" && html`<div class="answer">
       <div class="md" onClick=${(e) => { const b = e.target.closest(".cite"); if (b) toggleEv(b.dataset.e); }}
         dangerouslySetInnerHTML=${{ __html: md(r.answer.text, labels) }}></div>
       ${ev && html`<${EvidenceCard} e=${ev} onClose=${() => setOpenEv(null)} openPerson=${openPerson} />`}
@@ -1466,7 +1469,7 @@ function KeyRow() {
 }
 
 // Pick any provider, paste a key, choose models from the ones that key can actually use.
-function ModelKeySheet({ close, first }) {
+function ModelKeySheet({ close, first, problem }) {
   const cur = modelKey.cfg();
   const [info, setInfo] = useState(null);
   const [prov, setProv] = useState(cur?.provider || "gemini");
@@ -1495,8 +1498,10 @@ function ModelKeySheet({ close, first }) {
   const pickModel = (label, v, set, hint) => html`<label>${label}<span class="tiny muted" style="font-weight:400"> ${hint}</span>
     <select value=${v} onChange=${(e) => set(e.target.value)}>${chk.models.map((m) => html`<option value=${m}>${m}</option>`)}</select></label>`;
   return html`<div>
-    <h2>${first ? "Connect your AI model" : "Your AI model"}</h2>
-    <p class="small muted" style="margin-top:0">FINN works with any major model. Pick a provider, paste your API key, and choose models. The key stays on this device and goes only to FINN, with your own requests. FINN never saves it.</p>
+    <h2>${first ? "Enter your API key to start" : "Your AI model"}</h2>
+    <p class="small" style="margin-top:0">FINN needs an AI model to write answers, summaries and analysis. Use your own API key from any major provider.</p>
+    <ol class="steps"><li class=${!chk?.ok ? "on" : "done"}>Choose your provider</li><li class=${!chk?.ok ? "on" : "done"}>Paste your API key</li><li class=${chk?.ok ? "on" : ""}>Pick your models</li></ol>
+    ${problem && html`<div class="err" style="margin:0 0 12px">${problem}</div>`}
     ${cur && html`<div class="keynow"><span>✓ ${modelKey.label(cur)}</span><button class="linkish tiny tap" onClick=${remove}>Remove</button></div>`}
     ${!chk?.ok ? html`<form class="addform" onSubmit=${check}>
       <label>Provider<select value=${prov} onChange=${(e) => { setProv(e.target.value); setChk(null); }}>
@@ -1512,8 +1517,8 @@ function ModelKeySheet({ close, first }) {
       ${pickModel("Deep model", deep, setDeep, "judgement and answers")}
       <div class="row-btns"><button class="btn sig" onClick=${save}>Use these models</button><button class="btn" onClick=${() => setChk(null)}>Back</button></div>
     </div>`}
-    ${!cur && !chk?.ok && html`<button class="linkish small tap" onClick=${() => { modelKey.skip(); close(); }}>${info?.server_key ? "Skip: use FINN's shared model" : "Skip: use FINN without AI for now"}</button>`}
-    <p class="tiny muted" style="margin-top:10px">Without a model FINN still works: filings are sorted by rules, numbers come straight from the source, and answers are assembled from the evidence.</p>
+    <p class="tiny muted" style="margin-top:10px">🔒 Your key stays on this device and is sent only to FINN with your own requests. FINN never stores or logs it.</p>
+    ${!cur && !chk?.ok && html`<button class="linkish small tap" onClick=${() => { modelKey.skip(); close(); }}>${info?.server_key ? "Not now: use FINN's shared key this session" : "Not now: browse without AI this session (Ask FINN can't answer)"}</button>`}
   </div>`;
 }
 
@@ -1685,7 +1690,16 @@ function App() {
   const [rulesVersion, setRulesVersion] = useState(0);
   const [me, setMe] = useState(null);
   useEffect(() => { api("/api/auth/me").then(setMe).catch(() => setMe({ user: "demo", name: "Demo investor", guest: true })); }, []);
-  useEffect(() => { if (!modelKey.get() && !modelKey.skipped()) setSheet({ kind: "modelkey", first: true }); }, []);
+  useEffect(() => {
+    const c = modelKey.cfg();
+    if (!c) { if (!modelKey.skipped()) setSheet({ kind: "modelkey", first: true }); return; }
+    let ok = false; try { ok = sessionStorage.getItem("finn.model.ok") === "1"; } catch {}
+    if (ok) return;
+    post("/api/llm/check", { key: c.key, provider: c.provider, base: c.base }).then((r) => {
+      if (r.ok) { try { sessionStorage.setItem("finn.model.ok", "1"); } catch {} }
+      else setSheet({ kind: "modelkey", first: true, problem: `Your saved ${c.label || c.provider} key stopped working: ${r.error}` });
+    }).catch(() => {});
+  }, []);
   const [unread, setUnread] = useState(0);
   const pollInbox = () => api("/api/notifications?limit=1").then((r) => setUnread(r.unread)).catch(() => {});
   useEffect(() => { pollInbox(); const k = setInterval(pollInbox, 60000); return () => clearInterval(k); }, []);
@@ -1728,7 +1742,7 @@ function App() {
       ${sheet.kind === "rules" && html`<${RulesSheet} onSaved=${() => { close(); setRulesVersion((v) => v + 1); }} />`}
       ${sheet.kind === "account" && html`<${AccountSheet} openScoring=${() => setSheet({ kind: "scoring" })} />`}
       ${sheet.kind === "scoring" && html`<${ScoringSheet} />`}
-      ${sheet.kind === "modelkey" && html`<${ModelKeySheet} close=${close} first=${sheet.first} />`}
+      ${sheet.kind === "modelkey" && html`<${ModelKeySheet} close=${close} first=${sheet.first} problem=${sheet.problem} />`}
       ${sheet.kind === "inbox" && html`<${InboxSheet} close=${close} />`}
       ${sheet.kind === "addco" && html`<${AddCompanySheet} close=${close} preset=${sheet.preset} />`}
       ${sheet.kind === "addperson" && html`<div><h2>Add someone</h2><p class="small muted" style="margin-top:0">FINN uses their career to rank them for events, and reminds you to keep in touch.</p>

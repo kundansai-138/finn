@@ -265,3 +265,53 @@ def test_leverage_is_computed_with_its_inputs():
     # an answer quoting the computed ratio now passes the grounding check
     assert verify.check("Debt-to-equity fell to 0.3x [E1].", [{**ev, "id": "E1"}])["ok"]
     assert tools._leverage("BANK", {"name": "Bank", "balance_sheet": {"periods": ["Mar 2026"], "rows": {"Borrowing": [5]}}}, 6) is None
+
+
+# ---- no model answer: say why, plainly; never dump raw passages as an answer ----------------------
+def _stub_agent(monkeypatch):
+    from finn.agent import core, memory, tools
+
+    monkeypatch.setattr(memory, "save", lambda t: None)
+    monkeypatch.setattr(memory, "learn_from", lambda m: [])
+    monkeypatch.setattr(tools, "run", lambda name, args: [{"title": "Bajaj Finance call", "source": "primary", "cite": "BAJFINANCE call p.2",
+                                                           "url": None, "text": "RAJEEV JAIN - VICE CHAIRMAN. Bajaj Finance Limited Page 2 of 19."}])
+    return core
+
+
+def test_no_model_connected_says_so(monkeypatch):
+    from finn.intel import llm
+
+    core = _stub_agent(monkeypatch)
+    monkeypatch.setattr(core, "LLM_ENABLED", False)
+    monkeypatch.setattr(llm, "LLM_ENABLED", False)
+    events = []
+    st = core.run("How is BAJFINANCE's margin holding up?", None, None, events.append)
+    ans = next(e for e in events if e["type"] == "answer")
+    assert ans["mode"] == "no_model" and ans["reason"] == "no_key"
+    assert "No AI model is connected" in ans["text"] and "RAJEEV" not in ans["text"]
+    assert st["answer_mode"] == "no_model"
+
+
+def test_visitor_key_failure_names_the_key_and_the_error(monkeypatch):
+    from finn.intel import llm
+
+    core = _stub_agent(monkeypatch)
+    monkeypatch.setenv("FINN_LLM", "on")
+    monkeypatch.setattr(llm, "_down", {})
+
+    def failing_call(purpose, **kw):
+        llm.log.warning("LLM API error 404 (%s): model gemini-9 is not found", purpose)
+        return None, None
+
+    monkeypatch.setattr(llm, "call", failing_call)
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: None)
+    t = llm.use_key("AIzaTestKey123", "gemini")
+    try:
+        events = []
+        core.run("How is BAJFINANCE's margin holding up?", None, None, events.append)
+    finally:
+        llm.reset_key(t)
+    ans = next(e for e in events if e["type"] == "answer")
+    assert ans["mode"] == "no_model" and ans["reason"] == "error"
+    assert ans["text"].startswith("The API key you provided (Google Gemini) couldn't produce this answer")
+    assert "model gemini-9 is not found" in ans["text"]

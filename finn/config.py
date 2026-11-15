@@ -42,7 +42,7 @@ TTL_PRICES = int(os.getenv("FINN_TTL_PRICES", str(6 * 3600)))
 # --- LLM routing -----------------------------------------------------------
 # Cheap model for bulk extraction / classification / one-liners; strong model
 # only where reasoning over numbers + quotes is needed. Both overridable.
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip().strip('"').strip("'")   # tolerate pasted quotes or spaces
 MODEL_FAST = os.getenv("FINN_MODEL_FAST", "claude-haiku-5-5")
 MODEL_DEEP = os.getenv("FINN_MODEL_DEEP", "claude-opus-5-5")
 LLM_ENABLED = bool(ANTHROPIC_API_KEY) and os.getenv("FINN_LLM", "on") != "off"

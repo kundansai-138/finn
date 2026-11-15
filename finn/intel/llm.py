@@ -43,8 +43,36 @@ PRICES = {
 _client = None
 
 
+# Circuit breaker: a rejected key (401/403) fails every call the same way, so stop calling for a while
+# instead of retrying each one-liner, enrichment and extraction. The app keeps running on its
+# deterministic fallbacks; a corrected key takes effect on redeploy, or after the pause here.
+AUTH_PAUSE_S = 900
+_auth_down_until = 0.0
+_auth_error = ""
+
+
+def available() -> bool:
+    return LLM_ENABLED and time.time() >= _auth_down_until
+
+
+def status() -> str:
+    if LLM_ENABLED is False:
+        return "off"
+    return "ok" if time.time() >= _auth_down_until else f"key rejected: {_auth_error}"
+
+
+def _key_rejected(purpose: str, e: Exception) -> None:
+    global _auth_down_until, _auth_error
+    first = time.time() >= _auth_down_until
+    _auth_down_until = time.time() + AUTH_PAUSE_S
+    _auth_error = str(getattr(e, "message", e))[:160]
+    if first:
+        log.error("Anthropic rejected the API key (%s): %s. Model calls paused for %d min; running on fallbacks. "
+                  "Set a valid ANTHROPIC_API_KEY.", purpose, _auth_error, AUTH_PAUSE_S // 60)
+
+
 def enabled() -> bool:
-    return LLM_ENABLED
+    return available()
 
 
 def _get_client():
@@ -94,7 +122,7 @@ def complete(
     cache_prefix: a long, stable block (e.g. a transcript) placed before `prompt` and marked for
     prompt caching, so several questions over the same document reuse it cheaply.
     """
-    if not LLM_ENABLED:
+    if not available():
         return None
     # Current models think adaptively before answering, and thinking counts against max_tokens: a
     # 120-token cap can be spent entirely on thinking and return nothing. Only generated tokens are
@@ -137,6 +165,9 @@ def complete(
             resp = client.messages.create(**kwargs)
     except anthropic.RateLimitError as e:
         log.warning("LLM rate limited (%s): %s", purpose, e)
+        return None
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
+        _key_rejected(purpose, e)
         return None
     except anthropic.APIStatusError as e:
         log.warning("LLM API error %s (%s): %s", e.status_code, purpose, e.message)
@@ -186,7 +217,7 @@ def call(
     response cache (skipped for web search, which must stay fresh).
     Returns (parsed_or_text, raw_response); (None, None) when the model is unavailable.
     """
-    if not LLM_ENABLED:
+    if not available():
         return None, None
     key = _key(model, system, json.dumps(messages, sort_keys=True, default=str) + (cache_key or ""), schema)
     if cache_key and not tools and RESPONSE_CACHE:
@@ -221,6 +252,9 @@ def call(
             kwargs["messages"] = kwargs["messages"] + [{"role": "assistant", "content": resp.content}]
     except anthropic.RateLimitError as e:
         log.warning("LLM rate limited (%s): %s", purpose, e)
+        return None, None
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
+        _key_rejected(purpose, e)
         return None, None
     except anthropic.APIStatusError as e:
         log.warning("LLM API error %s (%s): %s", e.status_code, purpose, e.message)

@@ -99,7 +99,7 @@ def health() -> dict[str, Any]:
     with store.ro() as c:
         c.execute(text("SELECT 1"))
     return {"ok": True, "db": store.engine().dialect.name, "db_ms": round((time.perf_counter() - t0) * 1000, 1),
-            "last_refresh_age_s": round(db.kv_age("meta", "last_refresh") or -1), "llm": llm.enabled(),
+            "last_refresh_age_s": round(db.kv_age("meta", "last_refresh") or -1), "llm": llm.enabled(), "llm_status": llm.status(),
             "scheduler": scheduler.status()}
 
 

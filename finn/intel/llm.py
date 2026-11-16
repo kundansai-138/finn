@@ -114,7 +114,7 @@ def creds_from(key: str | None, provider: str | None = None, fast: str | None = 
     f, d = clean((fast or "").strip()) or p.get("fast", ""), clean((deep or "").strip()) or p.get("deep", "")
     if not f or not d:
         return None
-    return Creds(prov, key, f, d, p.get("web") or f, base, visitor=True)
+    return Creds(prov, key, f, d, p.get("web") if prov == "anthropic" else f, base, visitor=True)
 
 
 def use_key(key: str | None, provider: str | None = None, fast: str | None = None, deep: str | None = None,
@@ -254,8 +254,12 @@ def check_key(key: str, provider: str | None = None, base: str | None = None) ->
             names = sorted(m.id for m in anthropic.Anthropic(api_key=key, timeout=15.0).models.list(limit=100))
         else:
             names = providers.list_models(base, key)
-        fast = p.get("fast") if p.get("fast") in names else (names[0] if names else "")
-        deep = p.get("deep") if p.get("deep") in names else fast
+        if p["kind"] == "gemini":
+            fast = providers.newest_gemini(names, "fast") or (names[0] if names else "")
+            deep = providers.newest_gemini(names, "deep") or fast
+        else:
+            fast = p.get("fast") if p.get("fast") in names else (names[0] if names else "")
+            deep = p.get("deep") if p.get("deep") in names else fast
         return {"ok": True, "provider": prov, "label": p["label"], "models": names[:400], "fast": fast, "deep": deep,
                 "search": bool(p.get("search"))}
     except (gemini.GeminiError, providers.ProviderError) as e:
@@ -483,7 +487,16 @@ def _other(purpose: str, c: Creds, **kw) -> Any | None:
     """Gemini natively; every other non-Anthropic provider through the OpenAI-compatible adapter."""
     try:
         if c.kind == "gemini":
-            return gemini.generate(c.key, **kw)
+            try:
+                return gemini.generate(c.key, **kw)
+            except gemini.GeminiError as e:
+                # Google retires a model for new keys and names its replacement in the error. Use it once,
+                # so a saved choice that went stale still answers ("... use models/gemini-3.1-pro-preview ...").
+                m = re.search(r"use (?:models/)?(gemini-[\w.-]+)", e.message) if e.status_code == 404 else None
+                if not m or m.group(1) == kw.get("model"):
+                    raise
+                log.info("Model %s retired for this key; retrying with %s (%s)", kw.get("model"), m.group(1), purpose)
+                return gemini.generate(c.key, **{**kw, "model": m.group(1)})
         kw.pop("tools", None)
         return providers.generate(c.provider, c.base, c.key, **kw)
     except (gemini.GeminiError, providers.ProviderError) as e:
@@ -493,6 +506,7 @@ def _other(purpose: str, c: Creds, **kw) -> Any | None:
             log.warning("LLM rate limited (%s): %s", purpose, e.message)
         else:
             log.warning("LLM API error %s (%s): %s", e.status_code, purpose, e.message)
+        _last_err.set(e.message)   # what the visitor sees: the provider's words, not our log line
     except Exception as e:   # network trouble: the caller falls back
         log.warning("LLM connection error (%s): %s", purpose, e)
     return None

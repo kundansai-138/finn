@@ -25,7 +25,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "anthropic": {"label": "Anthropic (Claude)", "kind": "anthropic", "hint": "sk-ant-…", "search": True,
                   "fast": "claude-haiku-5-5", "deep": "claude-opus-5-5", "web": "claude-sonnet-5-5"},
     "gemini": {"label": "Google Gemini", "kind": "gemini", "hint": "AIza…", "search": True,
-               "fast": "gemini-2.5-flash", "deep": "gemini-2.5-pro", "web": "gemini-2.5-flash"},
+               "fast": "gemini-2.5-flash", "deep": "gemini-3.1-pro-preview", "web": "gemini-2.5-flash"},
     "openai": {"label": "OpenAI", "kind": "openai", "hint": "sk-…", "base": "https://api.openai.com/v1",
                "fast": "gpt-5-mini", "deep": "gpt-5", "schema": True},
     "openrouter": {"label": "OpenRouter (any model)", "kind": "openai", "hint": "sk-or-…", "base": "https://openrouter.ai/api/v1",
@@ -41,6 +41,24 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "custom": {"label": "Other OpenAI-compatible API", "kind": "openai", "hint": "your key", "base": "",
                "fast": "", "deep": ""},
 }
+
+
+_NOT_CHAT = ("embedding", "image", "tts", "live", "audio", "aqa", "computer-use", "robotics", "nano", "gemma", "-exp", "learnlm", "veo", "imagen")
+
+
+def newest_gemini(names: list[str] | set[str], role: str) -> str:
+    """The newest chat model of a role ("deep" = pro, "fast" = flash, not lite) in what this key can list.
+    Google retires models for new keys (gemini-2.5-pro went first), so pick from the key's own list
+    instead of trusting a fixed name. Newest version wins; at equal version, stable beats preview."""
+    want = "-pro" if role == "deep" else "-flash"
+    cands = [n for n in names if n.startswith("gemini-") and want in n and "lite" not in n and not any(x in n for x in _NOT_CHAT)
+             and "latest" not in n]
+
+    def key(n: str):
+        m = re.match(r"gemini-(\d+(?:\.\d+)?)", n)
+        return (float(m.group(1)) if m else 0.0, "preview" not in n, -len(n))
+
+    return max(cands, key=key) if cands else ""
 
 
 def guess(key: str) -> str | None:

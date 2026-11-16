@@ -454,7 +454,7 @@ def _no_model() -> dict:
     """The model couldn't answer: say exactly why, and nothing else. FINN doesn't pass off raw passages as an answer."""
     f = llm.failure()
     who = "The API key you provided" if f["visitor"] else "The server's API key"
-    raw = f["detail"] or ""
+    raw = re.sub(r"^LLM [\w ]+?(?:\d{3} )?\([\w-]+\):\s*", "", f["detail"] or "")   # drop our own log prefix
     m = re.search(r"""['"]message['"]\s*:\s*['"]([^'"]+)""", raw)   # the provider's own words, not its JSON envelope
     detail = re.sub(r"\s+", " ", m.group(1) if m else raw).strip().rstrip(".")[:200]
     if f["reason"] == "no_key":

@@ -128,3 +128,44 @@ def test_pages_that_show_the_model_still_load():
         assert llm.models() == {"provider": "gemini", "fast": "g-fast", "deep": "g-deep"}
     finally:
         llm.reset_key(t)
+
+
+def test_newest_gemini_models_are_picked():
+    names = {"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.1-pro-preview", "gemini-3-flash-preview",
+             "gemini-embedding-001", "gemini-2.5-flash-image", "gemini-2.5-flash-preview-tts", "gemini-pro-latest"}
+    assert providers.newest_gemini(names, "deep") == "gemini-3.1-pro-preview"
+    assert providers.newest_gemini(names, "fast") == "gemini-3-flash-preview"
+    assert providers.newest_gemini({"gemini-3-pro", "gemini-3-pro-preview"}, "deep") == "gemini-3-pro"   # stable beats preview
+
+
+def test_retired_gemini_model_retries_with_the_suggested_one(monkeypatch):
+    seen = []
+
+    def gen(key, **kw):
+        seen.append(kw["model"])
+        if kw["model"] == "gemini-2.5-pro":
+            raise gemini.GeminiError(404, "This model models/gemini-2.5-pro is no longer available to new users. "
+                                          "Please update your code to use models/gemini-3.1-pro-preview for the latest features.")
+        return _resp("fine")
+
+    monkeypatch.setattr(gemini, "generate", gen)
+    t = llm.use_key("AIzaTestKey123", "gemini", fast="gemini-2.5-flash", deep="gemini-2.5-pro")
+    try:
+        assert llm.complete("t", "hi", tier="deep") == "fine"
+        assert seen == ["gemini-2.5-pro", "gemini-3.1-pro-preview"]
+    finally:
+        llm.reset_key(t)
+
+
+def test_provider_error_reaches_the_visitor_without_our_log_prefix(monkeypatch):
+    def gen(key, **kw):
+        raise gemini.GeminiError(400, "Request contains an invalid argument.")
+
+    monkeypatch.setattr(gemini, "generate", gen)
+    t = llm.use_key("AIzaTestKey123", "gemini")
+    try:
+        llm.clear_error()
+        assert llm.complete("t", "hi") is None
+        assert llm.failure()["detail"] == "Request contains an invalid argument."
+    finally:
+        llm.reset_key(t)

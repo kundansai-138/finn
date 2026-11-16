@@ -79,9 +79,9 @@ for t in sorted(tickers):
 hit("GET", "/api/company/NOTATICKER123", expect=(404,))
 
 # web context on the filings that need a look
-for nd in radar.get("needs", [])[:3]:
-    for i in nd.get("ids", [])[:1]:
-        hit("GET", f"/api/brief/{i}/web", check=need("status"))
+for nd in radar.get("needs", []):   # the app asks only for a filing (a price move has no event_id)
+    if nd.get("event_id"):
+        hit("GET", f"/api/brief/{nd['event_id']}/web", check=need("status"))
 
 # research search
 for q in ("hyundai", "kia", "tata", "hdfc", "semi"):

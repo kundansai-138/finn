@@ -1303,7 +1303,7 @@ function Turn({ r, onFollow, openPerson }) {
     <${RunTrace} r=${r} open=${trace} toggle=${() => setTrace(!trace)} />
     ${r.answer?.mode === "no_model" && html`<div class="answer"><div class="nomodel">
       <p>${r.answer.text}</p>
-      <button class="btn sig" onClick=${() => ui.openSheet({ kind: "modelkey" })}>${modelKey.cfg() ? "Change AI model" : "Connect AI model"}</button></div></div>`}
+      <button class="btn sig" onClick=${() => ui.openSheet({ kind: "modelkey" })}>${modelKey.cfg() ? "Change API key" : "Add API key"}</button></div></div>`}
     ${r.answer && r.answer.mode !== "no_model" && html`<div class="answer">
       <div class="md" onClick=${(e) => { const b = e.target.closest(".cite"); if (b) toggleEv(b.dataset.e); }}
         dangerouslySetInnerHTML=${{ __html: md(r.answer.text, labels) }}></div>
@@ -1464,7 +1464,7 @@ function AccountSheet({ openScoring }) {
 
 function KeyRow() {
   const c = modelKey.cfg();
-  return html`<div class="keyrow"><div style="min-width:0"><div class="t">AI model</div><div class="s">${c ? modelKey.label(c) : "Not set: FINN runs without your own model"}</div></div>
+  return html`<div class="keyrow"><div style="min-width:0"><div class="t">AI model</div><div class="s">${c ? modelKey.label(c) : "No key added: AI features are off"}</div></div>
     <button class="btn sm" onClick=${() => ui.openSheet({ kind: "modelkey" })}>${c ? "Change" : "Connect"}</button></div>`;
 }
 
@@ -1499,7 +1499,7 @@ function ModelKeySheet({ close, first, problem }) {
     <select value=${v} onChange=${(e) => set(e.target.value)}>${chk.models.map((m) => html`<option value=${m}>${m}</option>`)}</select></label>`;
   return html`<div>
     <h2>${first ? "Enter your API key to start" : "Your AI model"}</h2>
-    <p class="small" style="margin-top:0">FINN needs an AI model to write answers, summaries and analysis. Use your own API key from any major provider.</p>
+    <p class="small" style="margin-top:0">FINN uses your API key for every AI call: answers, summaries and analysis. Add a key from any major provider to start.</p>
     <ol class="steps"><li class=${!chk?.ok ? "on" : "done"}>Choose your provider</li><li class=${!chk?.ok ? "on" : "done"}>Paste your API key</li><li class=${chk?.ok ? "on" : ""}>Pick your models</li></ol>
     ${problem && html`<div class="err" style="margin:0 0 12px">${problem}</div>`}
     ${cur && html`<div class="keynow"><span>✓ ${modelKey.label(cur)}</span><button class="linkish tiny tap" onClick=${remove}>Remove</button></div>`}
@@ -1518,7 +1518,7 @@ function ModelKeySheet({ close, first, problem }) {
       <div class="row-btns"><button class="btn sig" onClick=${save}>Use these models</button><button class="btn" onClick=${() => setChk(null)}>Back</button></div>
     </div>`}
     <p class="tiny muted" style="margin-top:10px">🔒 Your key stays on this device and is sent only to FINN with your own requests. FINN never stores or logs it.</p>
-    ${!cur && !chk?.ok && html`<button class="linkish small tap" onClick=${() => { modelKey.skip(); close(); }}>${info?.server_key ? "Not now: use FINN's shared key this session" : "Not now: browse without AI this session (Ask FINN can't answer)"}</button>`}
+    ${!cur && !chk?.ok && html`<button class="linkish small tap" onClick=${() => { modelKey.skip(); close(); }}>Not now: browse without AI this session (Ask FINN can't answer)</button>`}
   </div>`;
 }
 

@@ -12,7 +12,7 @@ from finn import clock, store
 from finn.config import LLM_ENABLED
 from finn.network import discover as D
 
-pytestmark = [pytest.mark.live, pytest.mark.skipif(not LLM_ENABLED, reason="set FINN_TEST_LLM=on and ANTHROPIC_API_KEY")]
+pytestmark = [pytest.mark.live, pytest.mark.skipif(not LLM_ENABLED, reason="set FINN_LLM_SERVER_KEY=on and ANTHROPIC_API_KEY")]
 
 
 def _cost(purpose: str) -> float:

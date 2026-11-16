@@ -288,7 +288,7 @@ def test_no_model_connected_says_so(monkeypatch):
     st = core.run("How is BAJFINANCE's margin holding up?", None, None, events.append)
     ans = next(e for e in events if e["type"] == "answer")
     assert ans["mode"] == "no_model" and ans["reason"] == "no_key"
-    assert "No AI model is connected" in ans["text"] and "RAJEEV" not in ans["text"]
+    assert "You haven't added an API key" in ans["text"] and "RAJEEV" not in ans["text"]
     assert st["answer_mode"] == "no_model"
 
 

@@ -48,9 +48,11 @@ def _secret(*names: str) -> str:
 
 ANTHROPIC_API_KEY = _secret("ANTHROPIC_API_KEY")
 GEMINI_API_KEY = _secret("GEMINI_API_KEY", "GOOGLE_API_KEY")
-# The server's own key is optional (visitors can bring theirs, see finn/intel/providers.py). Set either
-# ANTHROPIC_API_KEY or GEMINI_API_KEY, or any provider with FINN_LLM_PROVIDER + FINN_LLM_API_KEY
-# (+ FINN_LLM_BASE_URL for "custom"; FINN_MODEL_FAST / FINN_MODEL_DEEP to pick models).
+# Model calls use the key each visitor enters in the app (see finn/intel/providers.py). FINN has no key
+# of its own by default: a key set in the environment is ignored unless FINN_LLM_SERVER_KEY=on (for
+# local development, the live tests, and scheduled jobs). Then set ANTHROPIC_API_KEY or GEMINI_API_KEY,
+# or any provider with FINN_LLM_PROVIDER + FINN_LLM_API_KEY (+ FINN_LLM_BASE_URL for "custom").
+LLM_SERVER_KEY = os.getenv("FINN_LLM_SERVER_KEY", "off") == "on"
 _GENERIC = _secret("FINN_LLM_API_KEY")
 LLM_PROVIDER = os.getenv("FINN_LLM_PROVIDER", "").lower() or ("gemini" if GEMINI_API_KEY and not ANTHROPIC_API_KEY else "anthropic")
 _G = LLM_PROVIDER == "gemini"
@@ -58,7 +60,7 @@ LLM_API_KEY = _GENERIC or (GEMINI_API_KEY if _G else ANTHROPIC_API_KEY)
 LLM_BASE_URL = os.getenv("FINN_LLM_BASE_URL", "").strip()
 MODEL_FAST = os.getenv("FINN_MODEL_FAST", "gemini-2.5-flash" if _G else "claude-haiku-5-5")
 MODEL_DEEP = os.getenv("FINN_MODEL_DEEP", "gemini-2.5-pro" if _G else "claude-opus-5-5")
-LLM_ENABLED = bool(LLM_API_KEY) and os.getenv("FINN_LLM", "on") != "off"
+LLM_ENABLED = LLM_SERVER_KEY and bool(LLM_API_KEY) and os.getenv("FINN_LLM", "on") != "off"
 # Agent roles. The answer-writer gets the strongest model (1M context, adaptive reasoning; repairs at
 # low effort); the planner reuses it at low effort, but only for questions the rule planner can't plan
 # confidently (comparisons, multi-part, no explicit topic); web search runs on Sonnet (server-side

@@ -25,6 +25,8 @@ def _from_env_file(key: str) -> str | None:
 _url = os.environ.get("TEST_DATABASE_URL") or _from_env_file("TEST_DATABASE_URL")
 os.environ["DATABASE_URL"] = _url or f"sqlite:///{(ROOT / 'data' / 'test.sqlite3').as_posix()}"
 os.environ["FINN_LLM"] = os.environ.get("FINN_TEST_LLM", "off")   # "on" only for `-m live` runs that should spend
+if os.environ["FINN_LLM"] == "on":
+    os.environ["FINN_LLM_SERVER_KEY"] = "on"   # the live suite calls the model with the key in .env
 os.environ["FINN_SCHEDULER"] = "off"
 os.environ["FINN_SCENARIOS"] = "on"
 

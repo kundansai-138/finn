@@ -453,12 +453,12 @@ def _decline(s: dict) -> dict:
 def _no_model() -> dict:
     """The model couldn't answer: say exactly why, and nothing else. FINN doesn't pass off raw passages as an answer."""
     f = llm.failure()
-    who = "The API key you provided" if f["visitor"] else "FINN's shared API key"
+    who = "The API key you provided" if f["visitor"] else "The server's API key"
     raw = f["detail"] or ""
     m = re.search(r"""['"]message['"]\s*:\s*['"]([^'"]+)""", raw)   # the provider's own words, not its JSON envelope
     detail = re.sub(r"\s+", " ", m.group(1) if m else raw).strip().rstrip(".")[:200]
     if f["reason"] == "no_key":
-        text = ("No AI model is connected, so I can't write this answer. Connect your API key (Anthropic, Gemini, OpenAI "
+        text = ("You haven't added an API key, so I can't write this answer. Add your API key (Anthropic, Gemini, OpenAI "
                 "or any OpenAI-compatible provider) and ask again.")
     elif f["reason"] == "rejected":
         text = (f"{who} ({f['provider']}) was rejected, so I can't get you this answer. "

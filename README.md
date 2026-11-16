@@ -2,7 +2,7 @@
 
 A mobile-first investor agent, installable on your phone. **Push** tells you what changed and why it matters. **Pull** researches any NSE company from primary sources. **The Network** sits under both and turns "what happened" into "who do I know who can explain this".
 
-> Design, architecture and trade-offs (including why PostgreSQL): [docs/DESIGN.md](docs/DESIGN.md) · How people are scored in each flow: [docs/SCORING.md](docs/SCORING.md) · How it's tested: [docs/TESTING.md](docs/TESTING.md)
+> Design, architecture and trade-offs (including why PostgreSQL): [docs/DESIGN.md](docs/DESIGN.md) · How people are scored in each flow: [docs/SCORING.md](docs/SCORING.md) · How it's tested: [docs/TESTING.md](docs/TESTING.md) · How it was built with AI (full Claude Code transcripts): [build-history/](build-history/)
 
 ## Run it
 

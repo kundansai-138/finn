@@ -1,5 +1,9 @@
 # Free hosting sleeps when idle, which stops the in-process scheduler. This wakes the app on the
 # exchange's schedule and triggers ingestion: every 30 min in market hours, and after the close.
+#
+# Needs two repository secrets (Settings -> Secrets and variables -> Actions):
+#   FINN_URL          the deployed app, e.g. https://finn-kjsg.onrender.com (no trailing slash)
+#   FINN_ADMIN_TOKEN  the value Render generated for FINN_ADMIN_TOKEN (Render -> finn -> Environment)
 name: refresh
 
 on:
@@ -12,7 +16,40 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger refresh
+      - name: Check the secrets are set
+        env:
+          FINN_URL: ${{ secrets.FINN_URL }}
+          FINN_ADMIN_TOKEN: ${{ secrets.FINN_ADMIN_TOKEN }}
         run: |
-          curl -fsS --retry 3 --retry-delay 20 --max-time 300 -X POST "${{ secrets.FINN_URL }}/api/refresh" \
-            -H "X-FINN-Admin: ${{ secrets.FINN_ADMIN_TOKEN }}"
+          missing=0
+          if [ -z "$FINN_URL" ]; then
+            echo "::error title=FINN_URL secret is not set::Add it under Settings -> Secrets and variables -> Actions: the deployed app's address, e.g. https://finn-kjsg.onrender.com"
+            missing=1
+          elif ! echo "$FINN_URL" | grep -Eq '^https?://[^/]+/?$'; then
+            echo "::error title=FINN_URL secret is malformed::It must be just the app's address, like https://finn-kjsg.onrender.com (no path)."
+            missing=1
+          fi
+          if [ -z "$FINN_ADMIN_TOKEN" ]; then
+            echo "::error title=FINN_ADMIN_TOKEN secret is not set::Copy the value of FINN_ADMIN_TOKEN from Render -> finn -> Environment into a repository secret of the same name."
+            missing=1
+          fi
+          exit $missing
+
+      - name: Trigger refresh
+        env:
+          FINN_URL: ${{ secrets.FINN_URL }}
+          FINN_ADMIN_TOKEN: ${{ secrets.FINN_ADMIN_TOKEN }}
+        run: |
+          url="${FINN_URL%/}/api/refresh"
+          # A sleeping free-tier app takes 30-60 s to wake; retry the transient failures that causes.
+          code=$(curl -sS -o body.txt -w '%{http_code}' --retry 3 --retry-delay 20 --retry-all-errors --max-time 300 \
+                   -X POST "$url" -H "X-FINN-Admin: $FINN_ADMIN_TOKEN") || {
+            echo "::error title=Couldn't reach FINN::No response from $url (curl exit $?). Is the app deployed and FINN_URL correct?"
+            exit 1
+          }
+          case "$code" in
+            200) echo "Refresh ran:"; cat body.txt ;;
+            403) echo "::error title=Admin token rejected (HTTP 403)::FINN_ADMIN_TOKEN in GitHub doesn't match the one on Render. Copy it again from Render -> finn -> Environment."; exit 1 ;;
+            404) echo "::error title=Not found (HTTP 404)::$url doesn't exist. Check FINN_URL points at the FINN app."; exit 1 ;;
+            *)   echo "::error title=Refresh failed (HTTP $code)::$(head -c 300 body.txt)"; exit 1 ;;
+          esac
